@@ -1,164 +1,78 @@
-# Odoo Database Connection & API
+# CFF Odoo Executive Dashboard
 
-Backend API connections to Odoo database with support for Node.js, Python, and PHP.
+Dashboard ผู้บริหารของ CITY FRESH FRUIT — ดึงข้อมูลจริงจาก Odoo 14 (PostgreSQL)
+แสดงยอดขายจาก **ใบแจ้งหนี้หัก CN แยกตาม Business Unit** แบบใกล้เคียง realtime
 
-## Setup
+**ใช้งานจริงที่:** http://192.168.101.104/Odoo
 
-### 1. Environment Variables
-Credentials are stored in `.env.local` (not committed to git):
+## สถาปัตยกรรม
 
-```bash
-ODOO_DB_HOST=203.151.190.135
-ODOO_DB_PORT=5432
-ODOO_DB_USER=odoo
-ODOO_DB_PASSWORD=oDo0c4414
-ODOO_DB_NAME=odoo
+```
+ผู้ใช้ (LAN) ──> Apache :80 (intranet server 192.168.101.104)
+                   │  ProxyPass /Odoo/ → 127.0.0.1:3000
+                   ▼
+              Express (server.js) — systemd: odoo-dashboard
+                   │  - เสิร์ฟ public/dashboard.html
+                   │  - API /api/odoo/* (อ่านอย่างเดียว, cache 60s)
+                   ▼
+              PostgreSQL ของ Odoo 14 — DB: odoo_cff_golive @ 203.151.190.135:5432
 ```
 
-## Node.js (Express API)
+- ทั้งระบบเป็น **Node.js เดียว ไม่มี framework อื่น** (รองรับ Node 16 ของ server)
+- ไม่มีการเขียนข้อมูลลง Odoo — SELECT อย่างเดียว + endpoint `/query` บังคับ SELECT/WITH เท่านั้น
 
-### Install Dependencies
+## นิยามตัวเลข (สำคัญ)
+
+| ตัวเลข | ที่มา |
+|---|---|
+| ยอด Invoice / CN / สุทธิ | `account_move_line` ของ `account_move` ประเภท `out_invoice`/`out_refund` ที่ `state='posted'` เท่านั้น (Draft ไม่นับ) |
+| จำนวนเงิน | `-aml.balance` = ยอด**ก่อน VAT ในสกุลเงินบริษัท** (รองรับ invoice USD) — ตรวจสอบแล้วตรงกับ `amount_untaxed_signed` ระดับใบ 100% |
+| กรองบรรทัด | `exclude_from_invoice_tab = false AND display_type IS NULL` (เฉพาะบรรทัดสินค้า) |
+| Business Unit | custom field `account_move_line.business_unit_id` → ตาราง `cu_business_unit` (Modern Trade (ห้าง), Traditional trade (ยี่ปั๊ว), Horeca, CLMV, Consignment, Direct sales, Retail store, Center) — ชื่อซ้ำได้ ต้อง GROUP BY name |
+| ช่วงเวลา | `invoice_date` (DATE); "วันนี้" = `(now() AT TIME ZONE 'Asia/Bangkok')::date` |
+| มูลค่าสต๊อก | `SUM(remaining_value)` จาก `stock_valuation_layer` (ทั้งบริษัท) |
+| POS วันนี้ | `pos_order` state paid/done/invoiced (แยกช่องทาง ไม่รวมในยอด invoice) |
+| สินค้าใกล้หมด | `stock_warehouse_orderpoint` เทียบ on-hand ใน location ประเภท internal |
+
+## API Endpoints
+
+| Endpoint | คำอธิบาย |
+|---|---|
+| `GET /` | หน้า dashboard |
+| `GET /api/odoo/dashboard?bu=all|<ชื่อ BU>&period=today|month|year` | ข้อมูลทั้งหน้า (KPI, ตาราง BU, เทรนด์ 14 วัน, สินค้าขายดี, เอกสารล่าสุด, แจ้งเตือน) |
+| `GET /api/odoo/business-units` | รายชื่อ BU ที่มียอดปีนี้ + ยอดสุทธิ |
+| `GET /api/odoo/tables`, `GET /api/odoo/schema/:table` | สำรวจ schema (dev) |
+| `POST /api/odoo/query` `{sql}` | query อ่านอย่างเดียว (SELECT/WITH คำสั่งเดียว) |
+| `GET /health` | health check |
+
+## บน Server (production)
+
+- โค้ด: `/Odoo/odoo-integration` · service: `systemctl {status,restart} odoo-dashboard` · log: `journalctl -u odoo-dashboard -f`
+- Apache proxy: `/etc/httpd/conf.d/intranet.cititex.co.th.conf` (แก้แล้วต้อง `apachectl configtest` ก่อน `systemctl reload httpd` — เครื่องนี้เป็น intranet production มีระบบอื่นอยู่)
+- Credentials อยู่ใน `/Odoo/odoo-integration/.env.local` (chmod 600, ไม่อยู่ใน git)
+
+### อัปเดตเวอร์ชันใหม่
+
+```bash
+ssh root@192.168.101.104
+cd /Odoo/odoo-integration && git pull origin master
+npm install --production        # เฉพาะเมื่อ dependencies เปลี่ยน
+systemctl restart odoo-dashboard
+curl -s -H 'Host: 192.168.101.104' http://127.0.0.1/Odoo/api/odoo/business-units | head -c 200
+```
+
+## รันบนเครื่อง dev
+
 ```bash
 npm install
+cp .env.example .env.local   # ใส่รหัสผ่านจริง
+PORT=3105 node server.js     # เปิด http://localhost:3105
 ```
 
-### Start Server
-```bash
-npm start
-```
+`node test.js` = ทดสอบการต่อ DB · `queries-validated.sql` = query หลักทั้งหมดที่ตรวจกับข้อมูลจริงแล้ว
 
-Server runs on `http://localhost:3000`
+## หมายเหตุ
 
-### API Endpoints
-
-**List all tables:**
-```bash
-GET /api/odoo/tables
-```
-
-**Get table schema:**
-```bash
-GET /api/odoo/schema/res_partner
-```
-
-**Fetch table data (with pagination & filters):**
-```bash
-GET /api/odoo/data/res_partner?limit=10&offset=0
-GET /api/odoo/data/res_partner?filter={"active":true}
-```
-
-**Count records:**
-```bash
-GET /api/odoo/count/res_partner
-```
-
-**Execute custom query:**
-```bash
-POST /api/odoo/query
-Content-Type: application/json
-
-{
-  "sql": "SELECT id, name FROM res_partner LIMIT 10"
-}
-```
-
-## Python
-
-### Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### Usage
-```python
-from odoo_connection import OdooConnection
-
-db = OdooConnection()
-
-# Get tables
-tables = db.get_tables()
-print(tables)
-
-# Get data with pagination
-data = db.get_data('res_partner', limit=10, offset=0)
-print(data)
-
-# Get table schema
-schema = db.get_table_schema('res_partner')
-print(schema)
-
-# Close connection
-db.close()
-```
-
-### Run Test
-```bash
-python odoo_connection.py
-```
-
-## PHP
-
-### Usage
-```php
-<?php
-require 'odoo-connection.php';
-
-$db = new OdooConnection();
-
-// Get tables
-$tables = $db->getTables();
-print_r($tables);
-
-// Get data
-$data = $db->getData('res_partner', 10, 0);
-print_r($data);
-
-// Get schema
-$schema = $db->getTableSchema('res_partner');
-print_r($schema);
-?>
-```
-
-### Run Test
-```bash
-php odoo-connection.php
-```
-
-## Common Odoo Tables
-
-- `res_partner` - Customers, Vendors, Contacts
-- `sale_order` - Sales Orders
-- `sale_order_line` - Sales Order Lines
-- `purchase_order` - Purchase Orders
-- `account_invoice` - Invoices
-- `product_product` - Products
-- `stock_move` - Inventory Moves
-- `account_move` - Journal Entries
-
-## Security Notes
-
-⚠️ **Do NOT:**
-- Commit `.env.local` to git
-- Share credentials in code
-- Allow DELETE/DROP operations via API (read-only recommended)
-
-## Error Handling
-
-All responses follow this format:
-
-**Success:**
-```json
-{
-  "success": true,
-  "data": [...],
-  "count": 5
-}
-```
-
-**Error:**
-```json
-{
-  "success": false,
-  "error": "Error message"
-}
-```
+- หน้าเว็บ refresh อัตโนมัติทุก 60 วินาที + server cache 60 วินาที → ข้อมูลหน่วงสูงสุด ~2 นาที
+- ไม่มีระบบ login — เข้าถึงได้ทั้ง LAN (ถ้าต้องการจำกัดสิทธิ์ให้เพิ่ม Basic Auth ที่ Apache หรือ token ใน Express)
+- helper `odoo_connection.py` / `odoo-connection.php` เป็นตัวอย่างต่อ DB ภาษาอื่น ไม่ได้ใช้ใน production
