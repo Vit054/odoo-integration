@@ -1,53 +1,53 @@
-// Express Server with Odoo API Routes
+// Express Server: Odoo Executive Dashboard + API
+const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
 
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: path.join(__dirname, '.env.local') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
 
-// Import Odoo API routes
+// Dashboard UI (served at / — behind Apache this appears as /Odoo/)
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// Odoo API routes
 const odooApi = require('./odoo-api');
 app.use('/api/odoo', odooApi);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Odoo API server is running' });
+  res.json({ status: 'ok', message: 'Odoo dashboard server is running' });
 });
 
-// Root endpoint - API documentation
-app.get('/', (req, res) => {
+// API documentation
+app.get('/api', (req, res) => {
   res.json({
-    name: 'Odoo Database API',
-    version: '1.0.0',
+    name: 'Odoo Dashboard API',
+    version: '2.0.0',
     endpoints: {
-      'GET /api/odoo/tables': 'List all database tables',
-      'GET /api/odoo/schema/:tableName': 'Get table schema (columns, types)',
-      'GET /api/odoo/data/:table': 'Fetch table data (limit, offset, filter)',
-      'GET /api/odoo/count/:table': 'Count records in table',
-      'POST /api/odoo/query': 'Execute custom SELECT query (body: {sql: "..."})',
-      'GET /health': 'Server health check'
+      'GET /': 'Executive dashboard UI',
+      'GET /api/odoo/dashboard?teamId=all|N': 'Dashboard data (real-time, 60s cache)',
+      'GET /api/odoo/business-units': 'Sales teams with volume this year',
+      'GET /api/odoo/tables': 'List database tables',
+      'GET /api/odoo/schema/:tableName': 'Table schema',
+      'POST /api/odoo/query': 'Read-only SELECT query {sql: "..."}',
+      'GET /health': 'Health check',
     },
-    examples: {
-      'Get partners': 'GET /api/odoo/data/res_partner?limit=10&offset=0',
-      'Get partner schema': 'GET /api/odoo/schema/res_partner',
-      'Filter data': 'GET /api/odoo/data/res_partner?filter={"active":true}',
-      'Custom query': 'POST /api/odoo/query with body {"sql": "SELECT id, name FROM res_partner LIMIT 5"}'
-    }
   });
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {
-  console.log(`✓ Odoo API server running on port ${PORT}`);
-  console.log(`  Visit http://localhost:${PORT} for API documentation`);
+  console.log(`✓ Odoo dashboard server running on port ${PORT}`);
 });
