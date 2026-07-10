@@ -1,13 +1,35 @@
 // Express API Routes for Odoo Database (Odoo 14 — odoo_cff_golive)
+// ยอดขายอิงจากใบแจ้งหนี้ (posted customer invoices) หัก CN, แยกตาม Business Unit
+// (custom field: account_move_line.business_unit_id -> cu_business_unit)
 const express = require('express');
 const router = express.Router();
 const odoo = require('./odoo-connection');
 
-// Bangkok-local date expression for a UTC timestamp column
-const BKK = (col) => `(${col} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')`;
-const CONFIRMED = `so.state IN ('sale','done')`;
+// Bangkok "today" (invoice_date is a DATE column — no TZ conversion needed on it)
+const TODAY_BKK = `(now() AT TIME ZONE 'Asia/Bangkok')::date`;
 
-// Simple in-memory cache (dashboard queries hit prod DB)
+// Product lines of posted customer invoices / credit notes
+const DOC_BASE = `
+  FROM account_move_line aml
+  JOIN account_move am ON am.id = aml.move_id
+  LEFT JOIN cu_business_unit bu ON bu.id = aml.business_unit_id
+  WHERE am.move_type IN ('out_invoice','out_refund')
+    AND am.state = 'posted'
+    AND aml.exclude_from_invoice_tab = false
+    AND aml.display_type IS NULL`;
+
+// -aml.balance = ยอดก่อน VAT ในสกุลเงินบริษัท (invoice บวก, CN ลบ)
+const INV_AMT = `COALESCE(SUM(CASE WHEN am.move_type = 'out_invoice' THEN -aml.balance ELSE 0 END), 0)::float`;
+const CN_AMT  = `COALESCE(SUM(CASE WHEN am.move_type = 'out_refund'  THEN  aml.balance ELSE 0 END), 0)::float`;
+const NET_AMT = `COALESCE(SUM(-aml.balance), 0)::float`;
+
+const PERIODS = {
+  today: `AND am.invoice_date = ${TODAY_BKK}`,
+  month: `AND date_trunc('month', am.invoice_date) = date_trunc('month', ${TODAY_BKK})`,
+  year:  `AND date_part('year', am.invoice_date) = date_part('year', ${TODAY_BKK})`,
+};
+
+// Simple in-memory cache (queries hit prod DB)
 const cache = new Map();
 const CACHE_TTL_MS = 60 * 1000;
 function cached(key, fn) {
@@ -19,44 +41,37 @@ function cached(key, fn) {
   });
 }
 
-// GET /api/odoo/business-units - sales teams that have volume this year
+async function one(sql, params) {
+  const r = await odoo.query(sql, params);
+  if (!r.success) throw new Error(r.error);
+  return r.data;
+}
+
+// GET /api/odoo/business-units - BU (cu_business_unit) ที่มียอดปีนี้
 router.get('/business-units', async (req, res) => {
   try {
-    const data = await cached('business-units', async () => {
-      const r = await odoo.query(`
-        SELECT ct.id, ct.name,
-               COUNT(so.id)::int AS orders,
-               COALESCE(SUM(so.amount_total),0)::float AS total
-        FROM crm_team ct
-        LEFT JOIN sale_order so ON so.team_id = ct.id
-          AND ${CONFIRMED}
-          AND ${BKK('so.date_order')}::date >= date_trunc('year', (now() AT TIME ZONE 'Asia/Bangkok'))::date
-        GROUP BY ct.id, ct.name
-        HAVING COUNT(so.id) > 0
-        ORDER BY SUM(so.amount_total) DESC NULLS LAST
-      `);
-      if (!r.success) throw new Error(r.error);
-      return r.data;
-    });
+    const data = await cached('business-units', () => one(`
+      SELECT bu.name, ${NET_AMT} AS net,
+             COUNT(DISTINCT am.id)::int AS docs
+      ${DOC_BASE}
+        ${PERIODS.year}
+        AND bu.name IS NOT NULL
+      GROUP BY bu.name
+      ORDER BY net DESC`));
     res.json({ success: true, data });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// GET /api/odoo/dashboard?teamId=N - executive dashboard data
+// GET /api/odoo/dashboard?bu=all|<ชื่อ BU>&period=today|month|year
 router.get('/dashboard', async (req, res) => {
-  const teamIdRaw = req.query.teamId;
-  let teamId = null;
-  if (teamIdRaw && teamIdRaw !== 'all') {
-    teamId = parseInt(teamIdRaw, 10);
-    if (!Number.isInteger(teamId)) {
-      return res.status(400).json({ success: false, error: 'teamId must be an integer or "all"' });
-    }
-  }
+  const period = PERIODS[req.query.period] ? req.query.period : 'month';
+  const buName = req.query.bu && req.query.bu !== 'all' ? String(req.query.bu) : null;
 
   try {
-    const data = await cached(`dashboard:${teamId || 'all'}`, () => buildDashboard(teamId));
+    const data = await cached(`dashboard:${buName || 'all'}:${period}`, () =>
+      buildDashboard(buName, period));
     res.json({ success: true, data });
   } catch (e) {
     console.error('dashboard error:', e);
@@ -64,73 +79,65 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-async function one(sql, params) {
-  const r = await odoo.query(sql, params);
-  if (!r.success) throw new Error(r.error);
-  return r.data;
-}
+async function buildDashboard(buName, period) {
+  const p = buName ? [buName] : [];
+  const buFilter = buName ? 'AND bu.name = $1' : '';
+  const periodFilter = PERIODS[period];
 
-async function buildDashboard(teamId) {
-  const p = teamId ? [teamId] : [];
-  const soTeam = teamId ? 'AND so.team_id = $1' : '';
-  const amTeam = teamId ? 'AND am.team_id = $1' : '';
+  const [kpiRows, buBreakdown, trendRows, topProducts, recentDocs,
+         lowStockRows, inventoryRows, posRows, draftRows] = await Promise.all([
 
-  const [todayRows, yesterdayRows, pendingRows, revenueRows, trendRows,
-         topProducts, recentOrders, lowStockRows, inventoryRows, posRows] = await Promise.all([
+    // KPI: invoice / CN / net + จำนวนใบ (ตามช่วงเวลา + BU)
+    one(`SELECT ${INV_AMT} AS invoice, ${CN_AMT} AS cn, ${NET_AMT} AS net,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.move_type='out_invoice')::int AS invoice_count,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.move_type='out_refund')::int AS cn_count
+         ${DOC_BASE} ${periodFilter} ${buFilter}`, p),
 
-    // Today's confirmed sales (Bangkok date)
-    one(`SELECT COUNT(*)::int AS orders, COALESCE(SUM(so.amount_total),0)::float AS total
-         FROM sale_order so
-         WHERE ${CONFIRMED} ${soTeam}
-           AND ${BKK('so.date_order')}::date = (now() AT TIME ZONE 'Asia/Bangkok')::date`, p),
+    // ตารางแยกตาม BU (ตามช่วงเวลา — แสดงทุก BU เสมอ)
+    one(`SELECT COALESCE(bu.name, '(ไม่ระบุ BU)') AS bu,
+                ${INV_AMT} AS invoice, ${CN_AMT} AS cn, ${NET_AMT} AS net,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.move_type='out_invoice')::int AS invoice_count,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.move_type='out_refund')::int AS cn_count
+         ${DOC_BASE} ${periodFilter}
+         GROUP BY 1 ORDER BY net DESC`),
 
-    // Yesterday (for % change)
-    one(`SELECT COALESCE(SUM(so.amount_total),0)::float AS total
-         FROM sale_order so
-         WHERE ${CONFIRMED} ${soTeam}
-           AND ${BKK('so.date_order')}::date = (now() AT TIME ZONE 'Asia/Bangkok')::date - 1`, p),
+    // แนวโน้ม 14 วัน (สุทธิรายวัน)
+    one(`SELECT to_char(am.invoice_date, 'YYYY-MM-DD') AS date,
+                ${INV_AMT} AS invoice, ${CN_AMT} AS cn, ${NET_AMT} AS net
+         ${DOC_BASE} ${buFilter}
+           AND am.invoice_date >= ${TODAY_BKK} - 13
+         GROUP BY am.invoice_date ORDER BY am.invoice_date`, p),
 
-    // Pending quotations (pipeline)
-    one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(so.amount_total),0)::float AS total
-         FROM sale_order so
-         WHERE so.state IN ('draft','sent') ${soTeam}`, p),
-
-    // Revenue YTD from posted customer invoices (company currency, refunds netted)
-    one(`SELECT COALESCE(SUM(am.amount_untaxed_signed),0)::float AS revenue
-         FROM account_move am
-         WHERE am.move_type IN ('out_invoice','out_refund') AND am.state = 'posted' ${amTeam}
-           AND date_part('year', am.invoice_date) = date_part('year', (now() AT TIME ZONE 'Asia/Bangkok'))`, p),
-
-    // 14-day sales trend
-    one(`SELECT to_char(${BKK('so.date_order')}::date, 'YYYY-MM-DD') AS date,
-                COUNT(*)::int AS orders, COALESCE(SUM(so.amount_total),0)::float AS amount
-         FROM sale_order so
-         WHERE ${CONFIRMED} ${soTeam}
-           AND ${BKK('so.date_order')}::date >= (now() AT TIME ZONE 'Asia/Bangkok')::date - 13
-         GROUP BY 1 ORDER BY 1`, p),
-
-    // Top products this month
-    one(`SELECT pt.name, SUM(sol.product_uom_qty)::float AS qty,
-                SUM(sol.price_subtotal)::float AS revenue
-         FROM sale_order_line sol
-         JOIN sale_order so ON so.id = sol.order_id
-         JOIN product_product pp ON pp.id = sol.product_id
+    // สินค้าขายดี (สุทธิ ตามช่วงเวลา + BU)
+    one(`SELECT pt.name, SUM(aml.quantity)::float AS qty, SUM(-aml.balance)::float AS revenue
+         FROM account_move_line aml
+         JOIN account_move am ON am.id = aml.move_id
+         JOIN product_product pp ON pp.id = aml.product_id
          JOIN product_template pt ON pt.id = pp.product_tmpl_id
-         WHERE ${CONFIRMED} ${soTeam}
-           AND date_trunc('month', ${BKK('so.date_order')}) = date_trunc('month', (now() AT TIME ZONE 'Asia/Bangkok'))
+         LEFT JOIN cu_business_unit bu ON bu.id = aml.business_unit_id
+         WHERE am.move_type IN ('out_invoice','out_refund') AND am.state='posted'
+           AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL
+           ${periodFilter} ${buFilter}
          GROUP BY pt.name ORDER BY revenue DESC LIMIT 8`, p),
 
-    // Recent orders
-    one(`SELECT so.name AS id, rp.name AS customer, so.amount_total::float AS amount,
-                so.state, ct.name AS team,
-                to_char(${BKK('so.date_order')}, 'DD/MM HH24:MI') AS date
-         FROM sale_order so
-         JOIN res_partner rp ON rp.id = so.partner_id
-         LEFT JOIN crm_team ct ON ct.id = so.team_id
-         WHERE so.state != 'cancel' ${soTeam}
-         ORDER BY so.date_order DESC LIMIT 10`, p),
+    // เอกสารล่าสุด (invoice + CN)
+    one(`SELECT am.name AS id, rp.name AS customer,
+                am.amount_untaxed_signed::float AS amount,
+                am.move_type AS type,
+                to_char(am.invoice_date, 'DD/MM/YYYY') AS date,
+                (SELECT string_agg(DISTINCT b2.name, ', ')
+                 FROM account_move_line l2
+                 JOIN cu_business_unit b2 ON b2.id = l2.business_unit_id
+                 WHERE l2.move_id = am.id) AS bu
+         FROM account_move am
+         JOIN res_partner rp ON rp.id = am.partner_id
+         WHERE am.move_type IN ('out_invoice','out_refund') AND am.state = 'posted'
+           ${buName ? `AND EXISTS (SELECT 1 FROM account_move_line l3
+                        JOIN cu_business_unit b3 ON b3.id = l3.business_unit_id
+                        WHERE l3.move_id = am.id AND b3.name = $1)` : ''}
+         ORDER BY am.invoice_date DESC, am.id DESC LIMIT 10`, p),
 
-    // Low stock (reordering rules) - company-wide
+    // สินค้าใกล้หมดสต๊อก (ทั้งบริษัท)
     one(`SELECT pt.name, COALESCE(SUM(sq.quantity),0)::float AS on_hand,
                 op.product_min_qty::float AS min_qty
          FROM stock_warehouse_orderpoint op
@@ -140,24 +147,23 @@ async function buildDashboard(teamId) {
            AND sq.location_id IN (SELECT id FROM stock_location WHERE usage='internal')
          GROUP BY pt.name, op.product_min_qty
          HAVING COALESCE(SUM(sq.quantity),0) < op.product_min_qty
-         ORDER BY (op.product_min_qty - COALESCE(SUM(sq.quantity),0)) DESC
-         LIMIT 10`),
+         ORDER BY (op.product_min_qty - COALESCE(SUM(sq.quantity),0)) DESC LIMIT 10`),
 
-    // Inventory value (stock valuation layers) - company-wide
+    // มูลค่าสต๊อก (ทั้งบริษัท)
     one(`SELECT COALESCE(SUM(remaining_value),0)::float AS value FROM stock_valuation_layer`),
 
-    // POS sales today - company-wide channel
+    // POS วันนี้ (ทั้งบริษัท)
     one(`SELECT COUNT(*)::int AS orders, COALESCE(SUM(po.amount_total),0)::float AS total
          FROM pos_order po
          WHERE po.state IN ('paid','done','invoiced')
-           AND ${BKK('po.date_order')}::date = (now() AT TIME ZONE 'Asia/Bangkok')::date`),
+           AND (po.date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')::date = ${TODAY_BKK}`),
+
+    // ใบแจ้งหนี้ค้าง draft
+    one(`SELECT COUNT(*)::int AS n FROM account_move
+         WHERE move_type = 'out_invoice' AND state = 'draft'`),
   ]);
 
-  const todaySales = todayRows[0].total;
-  const yesterdaySales = yesterdayRows[0].total;
-  const salesTrendPct = yesterdaySales > 0
-    ? ((todaySales - yesterdaySales) / yesterdaySales) * 100
-    : null;
+  const k = kpiRows[0];
 
   const alerts = [];
   if (lowStockRows.length > 0) {
@@ -167,32 +173,40 @@ async function buildDashboard(teamId) {
       message: lowStockRows.slice(0, 3).map((r) => r.name).join(', ') + (lowStockRows.length > 3 ? ' …' : ''),
     });
   }
-  if (pendingRows[0].n > 0) {
+  if (k.cn_count > 0) {
     alerts.push({
-      id: 'pending', type: 'info',
-      title: `ใบเสนอราคารอยืนยัน ${pendingRows[0].n} ใบ`,
-      message: `มูลค่ารวม ฿${Math.round(pendingRows[0].total).toLocaleString()}`,
+      id: 'cn', type: 'info',
+      title: `CN ในช่วงนี้ ${k.cn_count} ใบ`,
+      message: `มูลค่ารวม ฿${Math.round(k.cn).toLocaleString()}`,
+    });
+  }
+  if (draftRows[0].n > 0) {
+    alerts.push({
+      id: 'draft', type: 'info',
+      title: `ใบแจ้งหนี้ค้าง Draft ${draftRows[0].n} ใบ`,
+      message: 'ยังไม่ได้ Post — ไม่ถูกนับในยอดขาย',
     });
   }
 
   return {
     generatedAt: new Date().toISOString(),
-    teamId: teamId || 'all',
+    bu: buName || 'all',
+    period,
     metrics: {
-      todaySales,
-      todayOrders: todayRows[0].orders,
-      yesterdaySales,
-      salesTrendPct,
-      pendingOrders: pendingRows[0].n,
-      pendingValue: pendingRows[0].total,
-      revenueYTD: revenueRows[0].revenue,
+      invoice: k.invoice,
+      cn: k.cn,
+      net: k.net,
+      invoiceCount: k.invoice_count,
+      cnCount: k.cn_count,
       inventoryValue: inventoryRows[0].value,
       posToday: posRows[0].total,
       posOrdersToday: posRows[0].orders,
+      draftInvoices: draftRows[0].n,
     },
-    charts: { salesTrend: trendRows },
+    buBreakdown,
+    charts: { trend: trendRows },
     topProducts,
-    recentOrders,
+    recentDocs,
     lowStock: lowStockRows,
     alerts,
   };
@@ -201,35 +215,25 @@ async function buildDashboard(teamId) {
 // ---------------------------------------------------------------------------
 // Generic/dev endpoints (read-only)
 
-// GET /api/odoo/tables - List all tables
 router.get('/tables', async (req, res) => {
   const result = await odoo.getTables();
   res.json(result);
 });
 
-// GET /api/odoo/schema/:tableName - Get table schema
 router.get('/schema/:tableName', async (req, res) => {
   const result = await odoo.getTableSchema(req.params.tableName);
   res.json(result);
 });
 
-// POST /api/odoo/query - Execute custom read-only query
 router.post('/query', async (req, res) => {
   const { sql } = req.body;
-
   if (!sql || typeof sql !== 'string') {
     return res.status(400).json({ success: false, error: 'SQL query required in request body' });
   }
-
-  // Read-only enforcement: single statement, must start with SELECT or WITH
   const trimmed = sql.trim().replace(/;\s*$/, '');
   if (trimmed.includes(';') || !/^(SELECT|WITH)\b/i.test(trimmed)) {
-    return res.status(403).json({
-      success: false,
-      error: 'Only single SELECT/WITH queries are allowed.',
-    });
+    return res.status(403).json({ success: false, error: 'Only single SELECT/WITH queries are allowed.' });
   }
-
   const result = await odoo.executeQuery(trimmed);
   res.json(result);
 });

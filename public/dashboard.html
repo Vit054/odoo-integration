@@ -57,11 +57,12 @@
       padding: 0.4rem 0.9rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit;
     }
     button.btn:hover { border-color: var(--accent); }
-    button.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button.btn:focus-visible, .bu-chip:focus-visible, .period-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .container { max-width: 1400px; margin: 0 auto; padding: 1.25rem 1.5rem 3rem; }
 
-    .bu-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .filter-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.25rem; }
+    .bu-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .bu-chip {
       background: var(--bg-primary); border: 1.5px solid var(--border); color: var(--text-secondary);
       padding: 0.45rem 1rem; border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-family: inherit; font-weight: 500;
@@ -69,19 +70,23 @@
     }
     .bu-chip:hover { border-color: var(--accent); color: var(--accent); }
     .bu-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-    .bu-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .period-bar { display: flex; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; flex-shrink: 0; }
+    .period-btn {
+      background: var(--bg-primary); border: none; color: var(--text-secondary);
+      padding: 0.45rem 1.1rem; cursor: pointer; font-size: 0.85rem; font-family: inherit; font-weight: 500;
+    }
+    .period-btn + .period-btn { border-left: 1px solid var(--border); }
+    .period-btn.active { background: var(--accent); color: #fff; font-weight: 700; }
 
     .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; }
-    .card {
-      background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem;
-    }
+    .card { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; }
     .kpi { grid-column: span 3; display: flex; flex-direction: column; gap: 0.2rem; }
     .kpi .label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.03em; }
-    .kpi .value { font-size: 1.65rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-    .kpi .delta { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-    .delta.up { color: var(--success); }
-    .delta.down { color: var(--error); }
-    .delta.flat { color: var(--text-secondary); }
+    .kpi .value { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .kpi .delta { font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+    .kpi.primary { border-top: 3px solid var(--accent); }
+    .kpi .value.neg { color: var(--error); }
 
     .span8 { grid-column: span 8; }
     .span4 { grid-column: span 4; }
@@ -95,19 +100,27 @@
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     tr:last-child td { border-bottom: none; }
     .table-scroll { overflow-x: auto; }
+    tr.bu-row { cursor: pointer; }
+    tr.bu-row:hover td { background: var(--bg-tertiary); }
+    tr.bu-row.selected td { background: var(--accent-light); font-weight: 600; }
+    tr.total-row td { border-top: 2px solid var(--border); font-weight: 800; }
+    td.cn-col { color: var(--error); }
+    .share-bar { display: inline-block; height: 8px; background: var(--accent); border-radius: 4px; vertical-align: middle; margin-right: 6px; opacity: 0.75; }
 
-    .pill { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
-    .pill.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
-    .pill.warn { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
-    .pill.muted { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; }
+    .pill.inv { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+    .pill.cn { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
 
-    .alert { border-left: 4px solid var(--warning); padding: 0.7rem 0.9rem; border-radius: 8px; background: var(--bg-primary); border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 0.6rem; }
+    .mini-stat { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0.2rem 0.8rem; border-bottom: 1px solid var(--border); margin-bottom: 0.8rem; }
+    .mini-stat .l { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; }
+    .mini-stat .v { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .alert { border-left: 4px solid var(--warning); padding: 0.7rem 0.9rem; border-radius: 8px; background: var(--bg-secondary); margin-bottom: 0.6rem; }
     .alert.info { border-left-color: var(--accent); }
     .alert .t { font-weight: 700; font-size: 0.85rem; }
     .alert .m { font-size: 0.8rem; color: var(--text-secondary); }
 
     #error-banner { display: none; background: color-mix(in srgb, var(--error) 12%, transparent); border: 1px solid var(--error); color: var(--error); padding: 0.7rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; }
-
     .loading { opacity: 0.45; pointer-events: none; transition: opacity 0.2s; }
     .skeleton-note { color: var(--text-secondary); font-size: 0.85rem; padding: 1.5rem 0; text-align: center; }
 
@@ -117,7 +130,7 @@
     }
     @media (max-width: 560px) {
       .kpi { grid-column: span 12; }
-      .kpi .value { font-size: 1.4rem; }
+      .kpi .value { font-size: 1.35rem; }
     }
     @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   </style>
@@ -126,11 +139,11 @@
   <header class="header">
     <div>
       <h1>CITY FRESH FRUIT — Executive Dashboard</h1>
-      <div class="sub">ข้อมูลจากระบบ Odoo แบบเรียลไทม์ · <span id="updated-at">กำลังโหลด…</span></div>
+      <div class="sub">ยอดขายจากใบแจ้งหนี้ (Invoice − CN, ก่อน VAT) · <span id="updated-at">กำลังโหลด…</span></div>
     </div>
     <div class="header-right">
       <span class="badge"><span class="live-dot"></span>LIVE</span>
-      <button class="btn" id="refresh-btn" onclick="loadDashboard(true)">⟳ รีเฟรช</button>
+      <button class="btn" onclick="loadDashboard(true)">⟳ รีเฟรช</button>
       <button class="btn" onclick="toggleTheme()">◐ ธีม</button>
     </div>
   </header>
@@ -138,57 +151,83 @@
   <main class="container">
     <div id="error-banner"></div>
 
-    <div class="bu-bar" id="bu-bar">
-      <button class="bu-chip active" data-team="all">ทุกหน่วยธุรกิจ</button>
+    <div class="filter-row">
+      <div class="bu-bar" id="bu-bar">
+        <button class="bu-chip active" data-bu="all">ทุก Business Unit</button>
+      </div>
+      <div class="period-bar" id="period-bar">
+        <button class="period-btn" data-period="today">วันนี้</button>
+        <button class="period-btn active" data-period="month">เดือนนี้</button>
+        <button class="period-btn" data-period="year">ปีนี้</button>
+      </div>
     </div>
 
     <div class="grid" id="dashboard">
-      <div class="card kpi">
-        <span class="label">ยอดขายวันนี้</span>
-        <span class="value" id="kpi-today">—</span>
-        <span class="delta flat" id="kpi-today-delta">&nbsp;</span>
+      <div class="card kpi primary">
+        <span class="label">ยอดสุทธิ (Invoice − CN)</span>
+        <span class="value" id="kpi-net">—</span>
+        <span class="delta" id="kpi-net-note">&nbsp;</span>
       </div>
       <div class="card kpi">
-        <span class="label">รายได้ปีนี้ (ตามใบแจ้งหนี้)</span>
-        <span class="value" id="kpi-ytd">—</span>
-        <span class="delta flat" id="kpi-ytd-note">ยอดสุทธิหลังหักลดหนี้</span>
+        <span class="label">ยอด Invoice</span>
+        <span class="value" id="kpi-invoice">—</span>
+        <span class="delta" id="kpi-invoice-note">&nbsp;</span>
       </div>
       <div class="card kpi">
-        <span class="label">มูลค่าสต๊อกคงคลัง</span>
-        <span class="value" id="kpi-inventory">—</span>
-        <span class="delta flat">ทั้งบริษัท (ตามมูลค่าทางบัญชี)</span>
+        <span class="label">ยอด CN (ลดหนี้)</span>
+        <span class="value" id="kpi-cn">—</span>
+        <span class="delta" id="kpi-cn-note">&nbsp;</span>
       </div>
       <div class="card kpi">
         <span class="label">ยอดขาย POS วันนี้</span>
         <span class="value" id="kpi-pos">—</span>
-        <span class="delta flat" id="kpi-pos-note">&nbsp;</span>
+        <span class="delta" id="kpi-pos-note">&nbsp;</span>
+      </div>
+
+      <div class="card span12">
+        <h2>ยอดขายแยกตาม Business Unit <small id="bu-period-label"></small></h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Business Unit</th>
+              <th class="num">Invoice (฿)</th>
+              <th class="num">จำนวน INV</th>
+              <th class="num">CN (฿)</th>
+              <th class="num">จำนวน CN</th>
+              <th class="num">สุทธิ (฿)</th>
+              <th style="width:22%">สัดส่วน</th>
+            </tr></thead>
+            <tbody id="bu-table"><tr><td colspan="7" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card span8">
-        <h2>แนวโน้มยอดขาย 14 วันล่าสุด <small id="chart-team-label"></small></h2>
+        <h2>แนวโน้มยอดสุทธิรายวัน 14 วันล่าสุด <small id="chart-bu-label"></small></h2>
         <div id="trend-chart"><div class="skeleton-note">กำลังโหลดข้อมูล…</div></div>
       </div>
 
       <div class="card span4">
-        <h2>การแจ้งเตือน</h2>
+        <h2>สถานะ & การแจ้งเตือน</h2>
+        <div class="mini-stat"><span class="l">มูลค่าสต๊อกคงคลัง (ทั้งบริษัท)</span><span class="v" id="mini-inventory">—</span></div>
         <div id="alerts"><div class="skeleton-note">—</div></div>
       </div>
 
       <div class="card span8">
-        <h2>คำสั่งขายล่าสุด</h2>
+        <h2>เอกสารล่าสุด (Invoice / CN)</h2>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>ทีมขาย</th><th class="num">มูลค่า (฿)</th><th>สถานะ</th><th>เวลา</th></tr></thead>
-            <tbody id="recent-orders"><tr><td colspan="6" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
+            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>BU</th><th>ประเภท</th><th class="num">มูลค่า (฿)</th><th>วันที่</th></tr></thead>
+            <tbody id="recent-docs"><tr><td colspan="6" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <div class="card span4">
-        <h2>สินค้าขายดีเดือนนี้</h2>
+        <h2>สินค้าขายดี <small id="top-period-label"></small></h2>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>สินค้า</th><th class="num">ยอดขาย (฿)</th></tr></thead>
+            <thead><tr><th>สินค้า</th><th class="num">ยอดสุทธิ (฿)</th></tr></thead>
             <tbody id="top-products"><tr><td colspan="2" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
           </table>
         </div>
@@ -197,8 +236,9 @@
   </main>
 
   <script>
-    var currentTeam = 'all';
-    var refreshTimer = null;
+    var currentBU = 'all';
+    var currentPeriod = 'month';
+    var PERIOD_LABEL = { today: 'วันนี้', month: 'เดือนนี้', year: 'ปีนี้' };
 
     // ---- theme ----
     function toggleTheme() {
@@ -217,14 +257,21 @@
     // ---- formatting ----
     function baht(n) {
       if (n === null || n === undefined) return '—';
-      if (Math.abs(n) >= 1e9) return '฿' + (n / 1e9).toFixed(2) + ' พันล้าน';
-      if (Math.abs(n) >= 1e6) return '฿' + (n / 1e6).toFixed(2) + ' ล้าน';
+      var abs = Math.abs(n);
+      if (abs >= 1e9) return '฿' + (n / 1e9).toFixed(2) + ' พันล้าน';
+      if (abs >= 1e6) return '฿' + (n / 1e6).toFixed(2) + ' ล้าน';
       return '฿' + Math.round(n).toLocaleString('th-TH');
     }
-    function bahtFull(n) { return Math.round(n).toLocaleString('th-TH'); }
+    function num(n) { return Math.round(n).toLocaleString('th-TH'); }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
-    // ---- business units ----
-    function loadTeams() {
+    // ---- filters ----
+    function loadBUs() {
       fetch('api/odoo/business-units')
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -233,31 +280,39 @@
           res.data.forEach(function (t) {
             var b = document.createElement('button');
             b.className = 'bu-chip';
-            b.dataset.team = t.id;
+            b.dataset.bu = t.name;
             b.textContent = t.name;
-            b.title = 'ยอดปีนี้ ' + baht(t.total) + ' (' + t.orders.toLocaleString() + ' ออเดอร์)';
-            b.onclick = function () { selectTeam(String(t.id), b); };
+            b.title = 'ยอดสุทธิปีนี้ ' + baht(t.net) + ' (' + t.docs.toLocaleString() + ' ใบ)';
+            b.onclick = function () { selectBU(t.name, b); };
             bar.appendChild(b);
           });
         })
         .catch(function () {});
     }
-    function selectTeam(teamId, btn) {
-      currentTeam = teamId;
+    function selectBU(bu, btn) {
+      currentBU = bu;
       var chips = document.querySelectorAll('.bu-chip');
       for (var i = 0; i < chips.length; i++) chips[i].classList.remove('active');
-      btn.classList.add('active');
+      if (btn) btn.classList.add('active');
       loadDashboard(true);
     }
-    document.querySelector('.bu-chip[data-team="all"]').onclick = function () {
-      selectTeam('all', this);
-    };
+    document.querySelector('.bu-chip[data-bu="all"]').onclick = function () { selectBU('all', this); };
+
+    var pbtns = document.querySelectorAll('.period-btn');
+    for (var i = 0; i < pbtns.length; i++) {
+      pbtns[i].onclick = function () {
+        currentPeriod = this.dataset.period;
+        for (var j = 0; j < pbtns.length; j++) pbtns[j].classList.remove('active');
+        this.classList.add('active');
+        loadDashboard(true);
+      };
+    }
 
     // ---- dashboard ----
     function loadDashboard(manual) {
       var dash = document.getElementById('dashboard');
       if (manual) dash.classList.add('loading');
-      fetch('api/odoo/dashboard?teamId=' + encodeURIComponent(currentTeam))
+      fetch('api/odoo/dashboard?bu=' + encodeURIComponent(currentBU) + '&period=' + currentPeriod)
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (!res.success) throw new Error(res.error || 'API error');
@@ -274,27 +329,62 @@
 
     function render(d) {
       var m = d.metrics;
+      var pl = PERIOD_LABEL[d.period] || '';
 
-      document.getElementById('kpi-today').textContent = baht(m.todaySales);
-      var deltaEl = document.getElementById('kpi-today-delta');
-      if (m.salesTrendPct === null || m.salesTrendPct === undefined) {
-        deltaEl.textContent = m.todayOrders.toLocaleString() + ' ออเดอร์วันนี้';
-        deltaEl.className = 'delta flat';
-      } else {
-        var up = m.salesTrendPct >= 0;
-        deltaEl.textContent = (up ? '▲ +' : '▼ ') + m.salesTrendPct.toFixed(1) + '% จากเมื่อวาน · ' + m.todayOrders.toLocaleString() + ' ออเดอร์';
-        deltaEl.className = 'delta ' + (up ? 'up' : 'down');
-      }
-
-      document.getElementById('kpi-ytd').textContent = baht(m.revenueYTD);
-      document.getElementById('kpi-inventory').textContent = baht(m.inventoryValue);
+      document.getElementById('kpi-net').textContent = baht(m.net);
+      document.getElementById('kpi-net').className = 'value' + (m.net < 0 ? ' neg' : '');
+      document.getElementById('kpi-net-note').textContent = pl + (d.bu === 'all' ? ' · ทุก BU' : ' · ' + d.bu);
+      document.getElementById('kpi-invoice').textContent = baht(m.invoice);
+      document.getElementById('kpi-invoice-note').textContent = m.invoiceCount.toLocaleString() + ' ใบ (' + pl + ')';
+      document.getElementById('kpi-cn').textContent = baht(m.cn);
+      document.getElementById('kpi-cn-note').textContent = m.cnCount.toLocaleString() + ' ใบ (' + pl + ')';
       document.getElementById('kpi-pos').textContent = baht(m.posToday);
       document.getElementById('kpi-pos-note').textContent = m.posOrdersToday.toLocaleString() + ' บิลวันนี้ (ทั้งบริษัท)';
 
+      document.getElementById('mini-inventory').textContent = baht(m.inventoryValue);
+      document.getElementById('bu-period-label').textContent = '· ' + pl;
+      document.getElementById('top-period-label').textContent = '· ' + pl;
+      document.getElementById('chart-bu-label').textContent = d.bu === 'all' ? '· ทุก BU' : '· ' + d.bu;
+
+      // BU breakdown table
+      var totalNet = 0, totalInv = 0, totalCn = 0, totalInvN = 0, totalCnN = 0;
+      d.buBreakdown.forEach(function (r) {
+        totalNet += r.net; totalInv += r.invoice; totalCn += r.cn;
+        totalInvN += r.invoice_count; totalCnN += r.cn_count;
+      });
+      var maxNet = Math.max.apply(null, d.buBreakdown.map(function (r) { return Math.abs(r.net); }).concat([1]));
+      var rows = d.buBreakdown.map(function (r) {
+        var share = totalNet !== 0 ? (r.net / totalNet) * 100 : 0;
+        var barW = Math.max(2, Math.abs(r.net) / maxNet * 100);
+        var sel = (currentBU !== 'all' && r.bu === currentBU) ? ' selected' : '';
+        return '<tr class="bu-row' + sel + '" data-bu="' + esc(r.bu) + '">' +
+          '<td>' + esc(r.bu) + '</td>' +
+          '<td class="num">' + num(r.invoice) + '</td>' +
+          '<td class="num">' + r.invoice_count.toLocaleString() + '</td>' +
+          '<td class="num cn-col">' + (r.cn > 0 ? '-' + num(r.cn) : '0') + '</td>' +
+          '<td class="num">' + r.cn_count.toLocaleString() + '</td>' +
+          '<td class="num"><strong>' + num(r.net) + '</strong></td>' +
+          '<td><span class="share-bar" style="width:' + (barW * 0.7) + '%"></span>' + share.toFixed(1) + '%</td></tr>';
+      }).join('');
+      rows += '<tr class="total-row"><td>รวมทั้งหมด</td>' +
+        '<td class="num">' + num(totalInv) + '</td><td class="num">' + totalInvN.toLocaleString() + '</td>' +
+        '<td class="num cn-col">' + (totalCn > 0 ? '-' + num(totalCn) : '0') + '</td><td class="num">' + totalCnN.toLocaleString() + '</td>' +
+        '<td class="num">' + num(totalNet) + '</td><td>100%</td></tr>';
+      document.getElementById('bu-table').innerHTML = rows;
+
+      // click BU row = filter
+      var buRows = document.querySelectorAll('tr.bu-row');
+      for (var i = 0; i < buRows.length; i++) {
+        buRows[i].onclick = function () {
+          var name = this.dataset.bu;
+          if (name === '(ไม่ระบุ BU)') return;
+          var chip = document.querySelector('.bu-chip[data-bu="' + CSS.escape(name) + '"]');
+          selectBU(name, chip || null);
+        };
+      }
+
       // chart
-      document.getElementById('trend-chart').innerHTML = trendSVG(d.charts.salesTrend);
-      var lbl = document.getElementById('chart-team-label');
-      lbl.textContent = d.teamId === 'all' ? '· ทุกหน่วยธุรกิจ' : '';
+      document.getElementById('trend-chart').innerHTML = trendSVG(d.charts.trend);
 
       // alerts
       var alertsEl = document.getElementById('alerts');
@@ -306,16 +396,18 @@
         }).join('');
       }
 
-      // recent orders
-      var stMap = { done: ['ยืนยันแล้ว', 'ok'], sale: ['ยืนยันแล้ว', 'ok'], draft: ['ใบเสนอราคา', 'muted'], sent: ['ส่งแล้ว', 'warn'] };
-      document.getElementById('recent-orders').innerHTML = d.recentOrders.map(function (o) {
-        var st = stMap[o.state] || [o.state, 'muted'];
-        return '<tr><td>' + esc(o.id) + '</td><td>' + esc(trunc(o.customer, 38)) + '</td><td>' + esc(trunc(o.team || '—', 22)) + '</td><td class="num">' + bahtFull(o.amount) + '</td><td><span class="pill ' + st[1] + '">' + st[0] + '</span></td><td>' + esc(o.date) + '</td></tr>';
+      // recent docs
+      document.getElementById('recent-docs').innerHTML = d.recentDocs.map(function (o) {
+        var isCN = o.type === 'out_refund';
+        return '<tr><td>' + esc(o.id) + '</td><td>' + esc(trunc(o.customer, 32)) + '</td>' +
+          '<td>' + esc(trunc(o.bu || '—', 24)) + '</td>' +
+          '<td><span class="pill ' + (isCN ? 'cn' : 'inv') + '">' + (isCN ? 'CN' : 'INV') + '</span></td>' +
+          '<td class="num">' + num(Math.abs(o.amount)) + '</td><td>' + esc(o.date) + '</td></tr>';
       }).join('') || '<tr><td colspan="6" class="skeleton-note">ไม่มีข้อมูล</td></tr>';
 
       // top products
       document.getElementById('top-products').innerHTML = d.topProducts.map(function (p) {
-        return '<tr><td>' + esc(trunc(p.name, 34)) + '</td><td class="num">' + bahtFull(p.revenue) + '</td></tr>';
+        return '<tr><td>' + esc(trunc(p.name, 34)) + '</td><td class="num">' + num(p.revenue) + '</td></tr>';
       }).join('') || '<tr><td colspan="2" class="skeleton-note">ไม่มีข้อมูล</td></tr>';
 
       var t = new Date(d.generatedAt);
@@ -323,26 +415,19 @@
         'อัปเดตล่าสุด ' + t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
-    function esc(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-      });
-    }
-    function trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-
     function trendSVG(rows) {
       if (!rows || rows.length === 0) return '<div class="skeleton-note">ยังไม่มีข้อมูลในช่วงนี้</div>';
       var W = 720, H = 240, padL = 66, padR = 14, padT = 14, padB = 34;
       var cw = W - padL - padR, ch = H - padT - padB;
-      var max = Math.max.apply(null, rows.map(function (r) { return r.amount; })) * 1.08 || 1;
+      var max = Math.max.apply(null, rows.map(function (r) { return r.net; })) * 1.08 || 1;
 
       var pts = rows.map(function (r, i) {
         var x = padL + (rows.length === 1 ? cw / 2 : (i / (rows.length - 1)) * cw);
-        var y = padT + ch - (r.amount / max) * ch;
+        var y = padT + ch - (Math.max(0, r.net) / max) * ch;
         return { x: x, y: y, r: r };
       });
 
-      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto" role="img" aria-label="กราฟแนวโน้มยอดขาย">';
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto" role="img" aria-label="กราฟแนวโน้มยอดสุทธิ">';
       for (var g = 0; g <= 4; g++) {
         var gy = padT + ch - (g / 4) * ch;
         svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="currentColor" stroke-opacity="0.08"/>';
@@ -355,7 +440,7 @@
       pts.forEach(function (p, i) {
         var last = i === pts.length - 1;
         svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (last ? 5 : 3) + '" fill="var(--accent)"' + (last ? ' stroke="var(--bg-primary)" stroke-width="2"' : '') + '>' +
-          '<title>' + p.r.date + ' · ฿' + Math.round(p.r.amount).toLocaleString() + ' · ' + p.r.orders + ' ออเดอร์</title></circle>';
+          '<title>' + p.r.date + '\nInvoice ฿' + Math.round(p.r.invoice).toLocaleString() + '\nCN ฿' + Math.round(p.r.cn).toLocaleString() + '\nสุทธิ ฿' + Math.round(p.r.net).toLocaleString() + '</title></circle>';
         if (i % 2 === 0 || last) {
           var dd = p.r.date.slice(8, 10) + '/' + p.r.date.slice(5, 7);
           svg += '<text x="' + p.x + '" y="' + (H - 12) + '" font-size="10" fill="currentColor" opacity="0.55" text-anchor="middle">' + dd + '</text>';
@@ -371,9 +456,9 @@
     }
 
     // ---- boot ----
-    loadTeams();
+    loadBUs();
     loadDashboard(true);
-    refreshTimer = setInterval(function () { loadDashboard(false); }, 60000);
+    setInterval(function () { loadDashboard(false); }, 60000);
   </script>
 </body>
 </html>
