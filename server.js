@@ -15,6 +15,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
+app.get('/config', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'config.html'));
+});
 
 // Odoo API routes
 const odooApi = require('./odoo-api');
@@ -37,6 +40,9 @@ app.get('/api', (req, res) => {
       'GET /api/odoo/tables': 'List database tables',
       'GET /api/odoo/schema/:tableName': 'Table schema',
       'POST /api/odoo/query': 'Read-only SELECT query {sql: "..."}',
+      'GET /config': 'หน้าตั้งค่าตารางที่เปิด INSERT (ต้องมี admin token)',
+      'POST /api/odoo/insert/:table': 'Insert ข้อมูล (Bearer token + ตารางต้องเปิดใน /config)',
+      'GET|PUT /api/odoo/config/writable-tables': 'ดู/ตั้งรายชื่อตารางที่เปิด INSERT (Bearer token)',
       'GET /health': 'Health check',
     },
   });

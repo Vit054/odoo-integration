@@ -45,6 +45,27 @@ Dashboard ผู้บริหารของ CITY FRESH FRUIT — ดึงข
 | `POST /api/odoo/query` `{sql}` | query อ่านอย่างเดียว (SELECT/WITH คำสั่งเดียว) |
 | `GET /health` | health check |
 
+### Write API (INSERT) — ต้องมี token
+
+| Endpoint | คำอธิบาย |
+|---|---|
+| `GET /config` | หน้าตั้งค่า: เลือกว่าเปิด INSERT ตารางไหนบ้าง (ใส่ admin token ในหน้า) |
+| `POST /api/odoo/insert/:table` | insert ข้อมูล — body `{data: {...}}` หรือ `{data: [...]}` (สูงสุด 500 แถว ใน transaction เดียว, `?dryRun=1` = ดู SQL โดยไม่รันจริง) |
+| `GET/PUT /api/odoo/config/writable-tables` | ดู/ตั้ง allowlist (`{tables: [...]}`) |
+
+กติกาความปลอดภัย:
+- **ปิดทุกตารางเป็นค่าเริ่มต้น** — เปิดรายตารางผ่านหน้า `/config` เท่านั้น (เก็บใน `writable-tables.json` บน server, ไม่อยู่ใน git)
+- ทุก write ต้องส่ง `Authorization: Bearer <ADMIN_TOKEN>` (ตั้งใน `.env.local` — ถ้าไม่ตั้ง Write API ปิดสนิท)
+- ชื่อคอลัมน์ถูกตรวจกับ schema จริงก่อนเสมอ (กัน SQL injection), หลายแถวรันใน transaction — พังแถวไหน rollback ทั้งหมด
+- ⚠️ INSERT ตรงเข้า DB **ข้าม business logic ของ Odoo** (เลขรันเอกสาร, ฟิลด์คำนวณ, สต๊อก) — ใช้กับตาราง custom/ข้อมูลง่าย ๆ เท่านั้น **อย่าเปิด** sale_order, account_move, stock_move ฯลฯ
+
+ตัวอย่าง:
+```bash
+curl -X POST http://192.168.101.104/Odoo/api/odoo/insert/my_table \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"data": {"name": "ทดสอบ", "qty": 5}}'
+```
+
 ## บน Server (production)
 
 - โค้ด: `/Odoo/odoo-integration` · service: `systemctl {status,restart} odoo-dashboard` · log: `journalctl -u odoo-dashboard -f`

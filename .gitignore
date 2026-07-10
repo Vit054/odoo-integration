@@ -27,3 +27,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Write API config (local, not in git)
+writable-tables.json

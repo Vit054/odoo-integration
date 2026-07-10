@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Config — ตารางที่เปิดให้ Insert</title>
+  <style>
+    :root {
+      --bg: #f5f7f9; --card: #ffffff; --text: #10202b; --muted: #51626f;
+      --border: #dfe6ec; --accent: #0d9488; --warning: #d97706; --error: #dc2626;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Leelawadee UI", Tahoma, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0a141c; --card: #101c26; --text: #ecf2f6; --muted: #9fb2c0; --border: #24374a; }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); line-height: 1.55; padding: 1.5rem; }
+    .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+    h1 { font-size: 1.25rem; }
+    .sub { font-size: 0.85rem; color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+    .warn { border-left: 4px solid var(--warning); font-size: 0.85rem; padding: 0.8rem 1rem; background: var(--card); border-radius: 8px; }
+    label { font-size: 0.8rem; font-weight: 600; color: var(--muted); display: block; margin-bottom: 0.3rem; }
+    input[type=password], input[type=text] {
+      width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--bg); color: var(--text); font-size: 0.9rem; font-family: inherit;
+    }
+    input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button {
+      background: var(--accent); color: #fff; border: none; padding: 0.55rem 1.2rem;
+      border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    button.secondary { background: transparent; color: var(--text); border: 1.5px solid var(--border); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+    .row > div { flex: 1; min-width: 200px; }
+    #status { font-size: 0.85rem; padding: 0.6rem 0.9rem; border-radius: 8px; display: none; }
+    #status.ok { display: block; background: color-mix(in srgb, #16a34a 12%, transparent); color: #16a34a; }
+    #status.err { display: block; background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+    .table-list { max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 0.75rem; }
+    .t-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.88rem; font-family: ui-monospace, Consolas, monospace; }
+    .t-item:last-child { border-bottom: none; }
+    .t-item.checked { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .t-item input { width: 16px; height: 16px; accent-color: var(--accent); }
+    .count { font-size: 0.8rem; color: var(--muted); }
+    code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.1rem 0.35rem; font-size: 0.8rem; }
+    pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; font-size: 0.75rem; overflow-x: auto; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <h1>⚙️ Config — ตารางที่เปิดให้ Insert</h1>
+      <div class="sub">เลือกว่า API อนุญาตให้ INSERT ข้อมูลเข้าตารางไหนได้บ้าง (ค่าเริ่มต้น: ปิดทุกตาราง)</div>
+    </div>
+
+    <div class="warn">
+      ⚠️ <strong>ข้อควรระวัง:</strong> INSERT ตรงเข้า database ข้าม business logic ของ Odoo
+      (เลขรันเอกสาร, ฟิลด์คำนวณ, สต๊อก) — เหมาะกับตาราง custom หรือตารางข้อมูลง่าย ๆ เท่านั้น
+      <strong>อย่าเปิด</strong>ตารางเอกสารอย่าง sale_order, account_move, stock_move
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="token">Admin Token</label>
+          <input type="password" id="token" placeholder="วาง token ที่ได้จากผู้ดูแล">
+        </div>
+        <button onclick="connect()">เชื่อมต่อ</button>
+      </div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card" id="manage" style="display:none">
+      <div class="row">
+        <div>
+          <label for="search">ค้นหาตาราง</label>
+          <input type="text" id="search" placeholder="เช่น res_partner, cu_..." oninput="renderList()">
+        </div>
+        <button class="secondary" onclick="showChecked = !showChecked; renderList()" id="filter-btn">แสดงเฉพาะที่เปิด</button>
+        <button onclick="save()" id="save-btn">💾 บันทึก</button>
+      </div>
+      <div class="count" id="count" style="margin-top:0.5rem"></div>
+      <div class="table-list" id="list"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:0.95rem; margin-bottom:0.5rem">วิธีเรียกใช้ Insert API</h2>
+      <div class="sub">ตารางต้องถูกเปิดในหน้านี้ก่อน แล้วเรียก:</div>
+      <pre>POST /Odoo/api/odoo/insert/&lt;ชื่อตาราง&gt;
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "data": { "คอลัมน์": "ค่า" } }          // แถวเดียว
+{ "data": [ {...}, {...} ] }              // หลายแถว (สูงสุด 500, ทำใน transaction)
+
+เพิ่ม ?dryRun=1 ท้าย URL = ดู SQL ที่จะรันโดยยังไม่ insert จริง</pre>
+    </div>
+  </div>
+
+  <script>
+    var allTables = [];
+    var enabled = new Set();
+    var showChecked = false;
+
+    function hdrs() {
+      return { 'Authorization': 'Bearer ' + document.getElementById('token').value.trim(), 'Content-Type': 'application/json' };
+    }
+    function setStatus(msg, ok) {
+      var el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = ok ? 'ok' : 'err';
+    }
+
+    try {
+      var t = localStorage.getItem('cff-admin-token');
+      if (t) document.getElementById('token').value = t;
+    } catch (e) {}
+
+    function connect() {
+      var token = document.getElementById('token').value.trim();
+      if (!token) { setStatus('กรุณาใส่ token', false); return; }
+      Promise.all([
+        fetch('api/odoo/config/writable-tables', { headers: hdrs() }).then(function (r) {
+          if (r.status === 401) throw new Error('token ไม่ถูกต้อง');
+          if (r.status === 503) throw new Error('server ยังไม่ได้ตั้ง ADMIN_TOKEN');
+          return r.json();
+        }),
+        fetch('api/odoo/tables').then(function (r) { return r.json(); }),
+      ]).then(function (results) {
+        enabled = new Set(results[0].data || []);
+        allTables = (results[1].data || []).map(function (t) { return t.table_name; });
+        try { localStorage.setItem('cff-admin-token', token); } catch (e) {}
+        document.getElementById('manage').style.display = 'block';
+        setStatus('เชื่อมต่อสำเร็จ — ตารางทั้งหมด ' + allTables.length + ' ตาราง', true);
+        renderList();
+      }).catch(function (e) {
+        document.getElementById('manage').style.display = 'none';
+        setStatus('เชื่อมต่อไม่สำเร็จ: ' + e.message, false);
+      });
+    }
+
+    function renderList() {
+      var q = document.getElementById('search').value.trim().toLowerCase();
+      document.getElementById('filter-btn').textContent = showChecked ? 'แสดงทั้งหมด' : 'แสดงเฉพาะที่เปิด';
+      var items = allTables.filter(function (t) {
+        if (showChecked && !enabled.has(t)) return false;
+        return !q || t.indexOf(q) !== -1;
+      });
+      // ตารางที่เปิดอยู่ขึ้นก่อน
+      items.sort(function (a, b) {
+        var ea = enabled.has(a) ? 0 : 1, eb = enabled.has(b) ? 0 : 1;
+        return ea - eb || a.localeCompare(b);
+      });
+      var html = items.slice(0, 400).map(function (t) {
+        var ch = enabled.has(t);
+        return '<label class="t-item' + (ch ? ' checked' : '') + '"><input type="checkbox" data-t="' + t + '"' + (ch ? ' checked' : '') + ' onchange="toggle(this)"> ' + t + '</label>';
+      }).join('');
+      if (items.length > 400) html += '<div class="t-item">… อีก ' + (items.length - 400) + ' ตาราง (ใช้ช่องค้นหา)</div>';
+      if (items.length === 0) html = '<div class="t-item">ไม่พบตาราง</div>';
+      document.getElementById('list').innerHTML = html;
+      document.getElementById('count').textContent = 'เปิดอยู่ ' + enabled.size + ' ตาราง · แสดง ' + Math.min(items.length, 400) + '/' + allTables.length;
+    }
+
+    function toggle(cb) {
+      if (cb.checked) enabled.add(cb.dataset.t); else enabled.delete(cb.dataset.t);
+      cb.closest('.t-item').classList.toggle('checked', cb.checked);
+      document.getElementById('count').textContent = 'เปิดอยู่ ' + enabled.size + ' ตาราง (ยังไม่บันทึก)';
+    }
+
+    function save() {
+      var btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      fetch('api/odoo/config/writable-tables', {
+        method: 'PUT', headers: hdrs(),
+        body: JSON.stringify({ tables: Array.from(enabled) }),
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (!res.success) throw new Error(res.error);
+        setStatus('บันทึกแล้ว — เปิด insert ได้ ' + res.data.length + ' ตาราง', true);
+        renderList();
+      }).catch(function (e) {
+        setStatus('บันทึกไม่สำเร็จ: ' + e.message, false);
+      }).then(function () { btn.disabled = false; });
+    }
+  </script>
+</body>
+</html>

@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const odoo = require('./odoo-connection');
+const configStore = require('./config-store');
 
 // Bangkok "today" (invoice_date is a DATE column — no TZ conversion needed on it)
 const TODAY_BKK = `(now() AT TIME ZONE 'Asia/Bangkok')::date`;
@@ -236,6 +237,119 @@ router.post('/query', async (req, res) => {
   }
   const result = await odoo.executeQuery(trimmed);
   res.json(result);
+});
+
+// ---------------------------------------------------------------------------
+// Write API (INSERT) — ปิดทุกตารางเป็นค่าเริ่มต้น เปิดรายตารางผ่านหน้า /config.html
+// ⚠️ INSERT ตรงเข้า DB ข้าม business logic ของ Odoo — ใช้กับตารางง่าย ๆ/custom เท่านั้น
+
+function requireToken(req, res, next) {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) {
+    return res.status(503).json({ success: false, error: 'Write API ปิดอยู่: ยังไม่ได้ตั้ง ADMIN_TOKEN ใน .env.local' });
+  }
+  const h = req.headers.authorization || '';
+  const provided = h.startsWith('Bearer ') ? h.slice(7) : req.headers['x-api-key'];
+  if (provided !== token) {
+    return res.status(401).json({ success: false, error: 'token ไม่ถูกต้องหรือไม่ได้ส่งมา (Authorization: Bearer <token>)' });
+  }
+  next();
+}
+
+const TABLE_RE = /^[a-z0-9_]+$/;
+
+// GET /api/odoo/config/writable-tables - ดูรายชื่อตารางที่เปิด INSERT
+router.get('/config/writable-tables', requireToken, (req, res) => {
+  res.json({ success: true, data: configStore.get() });
+});
+
+// PUT /api/odoo/config/writable-tables - ตั้งรายชื่อตาราง {tables: ["t1","t2"]}
+router.put('/config/writable-tables', requireToken, (req, res) => {
+  const { tables } = req.body || {};
+  if (!Array.isArray(tables) || tables.some((t) => typeof t !== 'string' || !TABLE_RE.test(t))) {
+    return res.status(400).json({ success: false, error: 'tables ต้องเป็น array ของชื่อตาราง (a-z, 0-9, _)' });
+  }
+  res.json({ success: true, data: configStore.set(tables) });
+});
+
+// POST /api/odoo/insert/:table - insert ข้อมูล
+// body: { data: {col: val} } หรือ { data: [{...}, {...}] } (สูงสุด 500 แถว, ทำใน transaction)
+// ?dryRun=1 = แสดง SQL ที่จะรันโดยไม่ execute (ไว้ทดสอบ)
+router.post('/insert/:table', requireToken, async (req, res) => {
+  const table = req.params.table;
+  if (!TABLE_RE.test(table)) {
+    return res.status(400).json({ success: false, error: 'ชื่อตารางไม่ถูกต้อง' });
+  }
+  if (!configStore.get().includes(table)) {
+    return res.status(403).json({
+      success: false,
+      error: `ตาราง "${table}" ยังไม่ได้เปิดให้ insert — เปิดได้ที่หน้า /config.html`,
+    });
+  }
+
+  let rows = req.body && req.body.data;
+  if (rows && !Array.isArray(rows)) rows = [rows];
+  if (!rows || rows.length === 0 || rows.length > 500) {
+    return res.status(400).json({ success: false, error: 'body ต้องมี data (object หรือ array 1–500 แถว)' });
+  }
+
+  try {
+    // ตรวจชื่อคอลัมน์กับ schema จริง (กัน SQL injection ผ่านชื่อคอลัมน์)
+    const schema = await one(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1`, [table]);
+    if (schema.length === 0) {
+      return res.status(404).json({ success: false, error: `ไม่พบตาราง "${table}" ใน database` });
+    }
+    const validCols = new Set(schema.map((r) => r.column_name));
+
+    const statements = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        return res.status(400).json({ success: false, error: `แถวที่ ${i + 1} ต้องเป็น object {คอลัมน์: ค่า}` });
+      }
+      const cols = Object.keys(row).filter((k) => row[k] !== undefined);
+      const bad = cols.filter((k) => !validCols.has(k));
+      if (bad.length > 0) {
+        return res.status(400).json({ success: false, error: `แถวที่ ${i + 1}: ไม่มีคอลัมน์ ${bad.join(', ')} ในตาราง ${table}` });
+      }
+      if (cols.length === 0) {
+        return res.status(400).json({ success: false, error: `แถวที่ ${i + 1}: ไม่มีข้อมูล` });
+      }
+      const quoted = cols.map((c) => `"${c}"`).join(', ');
+      const placeholders = cols.map((_, j) => `$${j + 1}`).join(', ');
+      statements.push({
+        sql: `INSERT INTO "${table}" (${quoted}) VALUES (${placeholders}) RETURNING *`,
+        values: cols.map((c) => row[c]),
+      });
+    }
+
+    if (req.query.dryRun) {
+      return res.json({ success: true, dryRun: true, statements });
+    }
+
+    // รันทั้งหมดใน transaction เดียว — พังแถวไหน rollback หมด
+    const client = await odoo.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inserted = [];
+      for (const st of statements) {
+        const r = await client.query(st.sql, st.values);
+        inserted.push(r.rows[0]);
+      }
+      await client.query('COMMIT');
+      res.json({ success: true, count: inserted.length, data: inserted });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ success: false, error: e.message });
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error('insert error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 module.exports = router;
