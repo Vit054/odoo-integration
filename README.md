@@ -36,6 +36,10 @@ Dashboard ผู้บริหารของ CITY FRESH FRUIT — ดึงข
 
 ## API Endpoints
 
+> 📘 **เอกสาร API มี 2 ชุด:**
+> - **ฉบับภายใน (ครบทุก endpoint):** [API-GUIDE.md](API-GUIDE.md)
+> - **ฉบับแจกคนภายนอก** (ตัด dashboard/config ออก เหลือเฉพาะ endpoint สำหรับ integration): หน้าเว็บ **http://192.168.101.104/Odoo/APIGuide** (ไฟล์ `public/api-guide.html`) พร้อมปุ่มดาวน์โหลด PDF `public/CFF-Odoo-API-Guide.pdf`, OpenAPI `public/openapi.yaml`, Postman `public/CFF-Odoo-API.postman_collection.json`
+
 | Endpoint | คำอธิบาย |
 |---|---|
 | `GET /` | หน้า dashboard |

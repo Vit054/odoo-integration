@@ -18,6 +18,10 @@ app.get('/', (req, res) => {
 app.get('/config', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'config.html'));
 });
+// API guideline สำหรับทีมภายนอก (behind Apache = /Odoo/APIGuide)
+app.get('/APIGuide', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'api-guide.html'));
+});
 
 // Odoo API routes
 const odooApi = require('./odoo-api');
@@ -35,6 +39,7 @@ app.get('/api', (req, res) => {
     version: '2.0.0',
     endpoints: {
       'GET /': 'Executive dashboard UI',
+      'GET /APIGuide': 'API guideline สำหรับทีมภายนอก (หน้าเว็บ + ลิงก์ PDF/OpenAPI/Postman)',
       'GET /api/odoo/dashboard?teamId=all|N': 'Dashboard data (real-time, 60s cache)',
       'GET /api/odoo/business-units': 'Sales teams with volume this year',
       'GET /api/odoo/tables': 'List database tables',

@@ -1,0 +1,276 @@
+openapi: 3.0.3
+info:
+  title: CFF Odoo API
+  version: 2.0.0
+  description: |
+    REST API สำหรับดึงข้อมูลจากระบบ Odoo 14 ของ CITY FRESH FRUIT
+
+    - เข้าถึงได้เฉพาะเครือข่ายภายในบริษัท (LAN) เท่านั้น
+    - **Read API** ไม่ต้องใช้ token
+    - **Write API** (INSERT) ต้องใช้ Bearer token และตารางต้องได้รับอนุญาตจากผู้ดูแลระบบเป็นรายตาราง
+    - ทุก response เป็น JSON: สำเร็จ `{success: true, data, count}` / ผิดพลาด `{success: false, error}`
+
+    **Fair Use:** ใส่ LIMIT ทุก query, อย่า SELECT * จากตารางใหญ่, อย่า polling ถี่เกินจำเป็น
+  contact:
+    name: IT/EDP — CITY FRESH FRUIT CO., LTD.
+
+servers:
+  - url: http://192.168.101.104/Odoo
+    description: Production (LAN เท่านั้น)
+
+tags:
+  - name: System
+    description: ตรวจสถานะระบบ
+  - name: Read
+    description: อ่านข้อมูล — ไม่ต้องใช้ token
+  - name: Write
+    description: เขียนข้อมูล — ต้องใช้ Bearer token และตารางต้องได้รับอนุญาต
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: ระบบทำงานปกติ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  message: { type: string, example: Odoo dashboard server is running }
+
+  /api/odoo/tables:
+    get:
+      tags: [Read]
+      summary: รายชื่อตารางทั้งหมดในฐานข้อมูล Odoo
+      operationId: listTables
+      responses:
+        '200':
+          description: รายชื่อตาราง
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            table_name: { type: string, example: account_move }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /api/odoo/schema/{tableName}:
+    get:
+      tags: [Read]
+      summary: โครงสร้างคอลัมน์ของตาราง
+      operationId: getTableSchema
+      parameters:
+        - name: tableName
+          in: path
+          required: true
+          schema: { type: string }
+          example: res_partner
+      responses:
+        '200':
+          description: รายการคอลัมน์ (ตารางที่ไม่มีอยู่จะได้ data เป็น array ว่าง)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            column_name: { type: string, example: id }
+                            data_type: { type: string, example: integer }
+                            is_nullable: { type: string, enum: [YES, 'NO'] }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /api/odoo/query:
+    post:
+      tags: [Read]
+      summary: SQL query อ่านอย่างเดียว (SELECT/WITH คำสั่งเดียว)
+      description: |
+        - อนุญาตเฉพาะคำสั่งที่ขึ้นต้นด้วย `SELECT` หรือ `WITH` **คำสั่งเดียว** (ห้ามมี `;` คั่นหลายคำสั่ง)
+        - **ใส่ `LIMIT` เสมอ** — query ยิงเข้าฐานข้อมูลที่ระบบงานจริงใช้อยู่
+        - Timestamp เก็บเป็น UTC — แปลงเป็นเวลาไทยด้วย `AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'`
+      operationId: runQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties:
+                sql:
+                  type: string
+                  description: คำสั่ง SELECT หรือ WITH คำสั่งเดียว
+            examples:
+              customers:
+                summary: ลูกค้า 20 รายล่าสุด
+                value:
+                  sql: "SELECT id, name, email FROM res_partner WHERE customer_rank > 0 ORDER BY id DESC LIMIT 20"
+              products:
+                summary: สินค้าที่ขายได้
+                value:
+                  sql: "SELECT pt.id, pt.name, pt.list_price FROM product_template pt WHERE pt.sale_ok = true ORDER BY pt.id LIMIT 50"
+              netSalesThisMonth:
+                summary: ยอดขายสุทธิเดือนนี้ (นิยามตรงกับฝ่ายบัญชี)
+                value:
+                  sql: "SELECT SUM(-aml.balance) AS net_sales FROM account_move_line aml JOIN account_move am ON am.id = aml.move_id WHERE am.move_type IN ('out_invoice','out_refund') AND am.state = 'posted' AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL AND date_trunc('month', am.invoice_date) = date_trunc('month', (now() AT TIME ZONE 'Asia/Bangkok')::date)"
+      responses:
+        '200':
+          description: ผลลัพธ์ query (ถ้า SQL ผิด ฟิลด์ success จะเป็น false พร้อม error)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object }
+        '400':
+          description: ไม่ได้ส่ง sql ใน body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: คำสั่งไม่ใช่ SELECT/WITH คำสั่งเดียว
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/odoo/insert/{table}:
+    post:
+      tags: [Write]
+      summary: เพิ่มข้อมูลลงตารางที่ได้รับอนุญาต
+      description: |
+        ⚠️ **คำเตือน:** เขียนตรงเข้าฐานข้อมูล ข้าม business logic ของ Odoo ทั้งหมด —
+        ใช้ได้เฉพาะตารางที่ผู้ดูแลระบบเปิดสิทธิ์ให้เป็นรายตาราง
+
+        - หลายแถว (สูงสุด 500) รันใน transaction เดียว — แถวไหนพัง rollback ทั้งหมด
+        - ชื่อคอลัมน์ถูกตรวจกับ schema จริงก่อนเสมอ
+        - ใช้ `?dryRun=1` เพื่อดู SQL โดยไม่เขียนจริง — ควรทดสอบก่อนยิงจริงทุกครั้ง
+      operationId: insertRows
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9_]+$'
+          description: ชื่อตาราง (ต้องได้รับอนุญาตจากผู้ดูแลก่อน)
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: string, enum: ['1'] }
+          description: ถ้าส่งมา จะคืน SQL ที่จะรันโดยไม่ execute จริง
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  description: object แถวเดียว หรือ array 1–500 แถว
+                  oneOf:
+                    - type: object
+                    - type: array
+                      items: { type: object }
+                      minItems: 1
+                      maxItems: 500
+            examples:
+              singleRow:
+                summary: แถวเดียว
+                value:
+                  data: { name: ทดสอบ, qty: 5 }
+              multiRow:
+                summary: หลายแถว (transaction เดียว)
+                value:
+                  data:
+                    - { name: A, qty: 1 }
+                    - { name: B, qty: 2 }
+      responses:
+        '200':
+          description: insert สำเร็จ (หรือผล dryRun)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  count: { type: integer, example: 2 }
+                  data:
+                    type: array
+                    description: แถวที่ insert แล้ว (รวมค่า default เช่น id)
+                    items: { type: object }
+        '400':
+          description: ข้อมูลผิดรูปแบบ / คอลัมน์ไม่มีในตาราง / เกิน 500 แถว / ขัด constraint
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: token ผิดหรือไม่ได้ส่ง
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: ตารางยังไม่ได้รับสิทธิ์ insert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: ตารางไม่มีในฐานข้อมูล
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503':
+          description: Write API ยังไม่เปิดใช้งาน
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: token ที่ได้รับจากผู้ดูแลระบบ (ส่งเป็น `x-api-key` header แทนได้)
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        count: { type: integer, description: จำนวนแถวใน data }
+
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error: { type: string, description: คำอธิบายข้อผิดพลาด }
+
+  responses:
+    ServerError:
+      description: ข้อผิดพลาดฝั่งระบบ
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }

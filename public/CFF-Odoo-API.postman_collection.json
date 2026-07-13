@@ -1,0 +1,186 @@
+{
+  "info": {
+    "_postman_id": "cff-odoo-api-2026-07",
+    "name": "CFF Odoo API",
+    "description": "REST API สำหรับดึงข้อมูลจากระบบ Odoo 14 ของ CITY FRESH FRUIT\n\n- ใช้ได้เฉพาะเครือข่ายภายในบริษัท (LAN)\n- Read API ไม่ต้องใช้ token\n- Write API (INSERT) ต้องตั้งค่า variable `adminToken` (ขอจากฝ่าย IT/EDP) และตารางต้องได้รับอนุญาตก่อน\n\nFair Use: ใส่ LIMIT ทุก query, อย่า SELECT * จากตารางใหญ่, อย่า polling ถี่เกินจำเป็น",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://192.168.101.104/Odoo", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "ตรวจว่าระบบทำงานอยู่ — ควรได้ {\"status\":\"ok\", ...}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Read (ไม่ต้องใช้ token)",
+      "item": [
+        {
+          "name": "รายชื่อตารางทั้งหมด",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/odoo/tables", "host": ["{{baseUrl}}"], "path": ["api", "odoo", "tables"] },
+            "description": "คืนรายชื่อตารางทั้งหมดในฐานข้อมูล Odoo — ใช้สำรวจว่ามีข้อมูลอะไรให้ดึงบ้าง"
+          },
+          "response": []
+        },
+        {
+          "name": "โครงสร้างตาราง (schema)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/odoo/schema/res_partner",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "odoo", "schema", "res_partner"]
+            },
+            "description": "ดูคอลัมน์และชนิดข้อมูลของตาราง — เปลี่ยน res_partner เป็นตารางที่สนใจ"
+          },
+          "response": []
+        },
+        {
+          "name": "SQL query — ลูกค้า 20 รายล่าสุด",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT id, name, email, phone FROM res_partner WHERE customer_rank > 0 ORDER BY id DESC LIMIT 20\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/odoo/query", "host": ["{{baseUrl}}"], "path": ["api", "odoo", "query"] },
+            "description": "อนุญาตเฉพาะ SELECT/WITH คำสั่งเดียว (ห้ามมี ;) — ใส่ LIMIT เสมอ"
+          },
+          "response": []
+        },
+        {
+          "name": "SQL query — รายการสินค้า",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT pt.id, pt.name, pt.list_price, pt.default_code FROM product_template pt WHERE pt.sale_ok = true ORDER BY pt.id LIMIT 50\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/odoo/query", "host": ["{{baseUrl}}"], "path": ["api", "odoo", "query"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SQL query — ยอดขายสุทธิเดือนนี้ (นิยามตรงฝ่ายบัญชี)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT SUM(-aml.balance) AS net_sales FROM account_move_line aml JOIN account_move am ON am.id = aml.move_id WHERE am.move_type IN ('out_invoice','out_refund') AND am.state = 'posted' AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL AND date_trunc('month', am.invoice_date) = date_trunc('month', (now() AT TIME ZONE 'Asia/Bangkok')::date)\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/odoo/query", "host": ["{{baseUrl}}"], "path": ["api", "odoo", "query"] },
+            "description": "เงื่อนไขบังคับให้ตัวเลขตรงกับรายงานบริษัท: นับเฉพาะ invoice/CN ที่ posted, ยอดก่อน VAT (-aml.balance), เฉพาะบรรทัดสินค้า"
+          },
+          "response": []
+        },
+        {
+          "name": "SQL query — สต๊อกคงเหลือในคลัง",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT pt.name, SUM(sq.quantity) AS on_hand FROM stock_quant sq JOIN product_product pp ON pp.id = sq.product_id JOIN product_template pt ON pt.id = pp.product_tmpl_id WHERE sq.location_id IN (SELECT id FROM stock_location WHERE usage = 'internal') GROUP BY pt.name ORDER BY on_hand DESC LIMIT 50\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/odoo/query", "host": ["{{baseUrl}}"], "path": ["api", "odoo", "query"] },
+            "description": "นับเฉพาะ location ชนิด internal = ของที่อยู่ในคลังจริง"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Write (ต้องใช้ token)",
+      "description": "⚠️ เขียนตรงเข้าฐานข้อมูล ข้าม business logic ของ Odoo — ใช้ได้เฉพาะตารางที่ผู้ดูแลเปิดสิทธิ์\n\nตั้งค่า variable `adminToken` ก่อนใช้งาน (ขอจากฝ่าย IT/EDP)",
+      "item": [
+        {
+          "name": "INSERT — ทดสอบด้วย dryRun (ไม่เขียนจริง)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"name\": \"ทดสอบ\",\n    \"qty\": 5\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/odoo/insert/:table?dryRun=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "odoo", "insert", ":table"],
+              "query": [{ "key": "dryRun", "value": "1" }],
+              "variable": [{ "key": "table", "value": "my_table", "description": "ชื่อตารางที่ได้รับอนุญาต" }]
+            },
+            "description": "คืน SQL ที่จะรันโดยไม่ execute จริง — ใช้ทดสอบก่อนยิงจริงทุกครั้ง"
+          },
+          "response": []
+        },
+        {
+          "name": "INSERT — แถวเดียว",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"name\": \"ทดสอบ\",\n    \"qty\": 5\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/odoo/insert/:table",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "odoo", "insert", ":table"],
+              "variable": [{ "key": "table", "value": "my_table", "description": "ชื่อตารางที่ได้รับอนุญาต" }]
+            },
+            "description": "คืนแถวที่ insert แล้ว (รวมค่า default เช่น id)"
+          },
+          "response": []
+        },
+        {
+          "name": "INSERT — หลายแถว (transaction เดียว)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": [\n    { \"name\": \"A\", \"qty\": 1 },\n    { \"name\": \"B\", \"qty\": 2 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/odoo/insert/:table",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "odoo", "insert", ":table"],
+              "variable": [{ "key": "table", "value": "my_table", "description": "ชื่อตารางที่ได้รับอนุญาต" }]
+            },
+            "description": "สูงสุด 500 แถวต่อครั้ง — แถวไหนพัง rollback ทั้งหมด"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>CFF Odoo API — Developer Guide</title>
+<style>
+  :root {
+    --green-900: #0d5c36;
+    --green-700: #14804b;
+    --green-500: #1a9c5d;
+    --ink: #1a2b21;
+    --line: #cfe0d6;
+    --bg-soft: #f2f7f4;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body {
+    font-family: 'Leelawadee UI', 'Segoe UI', Tahoma, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    margin: 0;
+    background: #fafcfb;
+  }
+  /* ---------- Top nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--green-900);
+    padding: 0 16px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  nav .inner { max-width: 920px; margin: 0 auto; display: flex; align-items: center; gap: 2px; }
+  nav .brand { color: #fff; font-weight: 700; font-size: 14px; margin-right: 14px; padding: 12px 0; }
+  nav a {
+    color: #d7ecdf; text-decoration: none; font-size: 13px;
+    padding: 12px 10px; display: inline-block;
+  }
+  nav a:hover { color: #fff; background: rgba(255,255,255,.08); }
+  /* ---------- Layout ---------- */
+  main { max-width: 920px; margin: 0 auto; padding: 22px 20px 60px; }
+  /* ---------- Cover ---------- */
+  .cover {
+    background: linear-gradient(135deg, var(--green-900) 0%, var(--green-700) 60%, var(--green-500) 100%);
+    color: #fff; border-radius: 12px;
+    padding: 30px 34px 26px; margin-bottom: 22px;
+  }
+  .cover .org { font-size: 12px; letter-spacing: 2px; opacity: .85; text-transform: uppercase; }
+  .cover h1 { margin: 8px 0 6px; font-size: 32px; font-weight: 700; }
+  .cover .sub { font-size: 15.5px; opacity: .95; }
+  .cover .meta { margin-top: 16px; font-size: 12.5px; opacity: .9; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  .downloads { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .downloads a {
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.45);
+    color: #fff; text-decoration: none;
+    border-radius: 8px; padding: 8px 16px; font-size: 13.5px; font-weight: 600;
+  }
+  .downloads a:hover { background: rgba(255,255,255,.25); }
+  /* ---------- Headings ---------- */
+  h2 {
+    font-size: 22px; color: var(--green-900);
+    border-bottom: 3px solid var(--green-700);
+    padding-bottom: 6px; margin: 40px 0 14px;
+  }
+  h2 .no {
+    display: inline-block; background: var(--green-700); color: #fff;
+    border-radius: 6px; font-size: 15px; padding: 2px 11px;
+    margin-right: 10px; vertical-align: 3px;
+  }
+  h3 { font-size: 17px; color: #14532d; margin: 24px 0 8px; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  /* ---------- Code ---------- */
+  code {
+    font-family: Consolas, 'Courier New', 'Leelawadee UI', monospace;
+    background: #eef4f0; border: 1px solid #d6e5dc; border-radius: 4px;
+    padding: 1px 5px; font-size: 13px; color: #0b3d24;
+  }
+  pre {
+    background: var(--bg-soft); border: 1px solid var(--line);
+    border-left: 4px solid var(--green-700); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; margin: 10px 0;
+  }
+  pre code {
+    background: none; border: none; padding: 0;
+    font-size: 13px; line-height: 1.55; color: #17301f;
+  }
+  /* ---------- Tables ---------- */
+  .tablewrap { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 10px 0 14px; font-size: 13.5px;
+  }
+  th { background: var(--green-700); color: #fff; text-align: left; padding: 8px 11px; font-weight: 600; }
+  td { border: 1px solid var(--line); padding: 7px 11px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f9f6; }
+  /* ---------- Callouts ---------- */
+  .warn, .note, .tip {
+    border-radius: 8px; padding: 12px 16px; margin: 12px 0;
+    border: 1px solid; border-left-width: 5px;
+  }
+  .warn { background: #fff7ed; border-color: #fdba74; border-left-color: #ea580c; }
+  .warn b { color: #c2410c; }
+  .note { background: #eff6ff; border-color: #93c5fd; border-left-color: #2563eb; }
+  .tip  { background: #f0fdf4; border-color: #86efac; border-left-color: #16a34a; }
+  /* ---------- Method badges ---------- */
+  .method {
+    display: inline-block; font-family: Consolas, monospace;
+    font-weight: 700; font-size: 11.5px; border-radius: 4px;
+    padding: 2px 8px; margin-right: 8px; color: #fff; vertical-align: 2px;
+  }
+  .get  { background: #2563eb; }
+  .post { background: #d97706; }
+  .footer-note {
+    margin-top: 48px; border-top: 1px solid var(--line);
+    padding-top: 12px; font-size: 12px; color: #5b6f63;
+  }
+  /* ---------- Print / PDF ---------- */
+  @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
+  @media print {
+    nav { display: none; }
+    body { background: #fff; font-size: 10.5pt; }
+    main { max-width: none; padding: 0; }
+    .cover { border-radius: 10px; padding: 24px 28px 20px; }
+    .cover h1 { font-size: 25pt; }
+    .downloads { display: none; }
+    h2 { break-after: avoid; margin-top: 22px; font-size: 15pt; }
+    h3 { break-after: avoid; font-size: 12pt; }
+    pre, table, .warn, .note, .tip { break-inside: avoid; }
+    pre { white-space: pre-wrap; word-break: break-word; overflow-x: hidden; }
+    .pagebreak-print { break-before: page; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav><div class="inner">
+  <span class="brand">CFF Odoo API</span>
+  <a href="#overview">ภาพรวม</a>
+  <a href="#quickstart">เริ่มต้น</a>
+  <a href="#read">Read API</a>
+  <a href="#write">Write API</a>
+  <a href="#data">ข้อมูล Odoo</a>
+  <a href="#errors">Errors</a>
+  <a href="#examples">ตัวอย่างโค้ด</a>
+  <a href="#fairuse">Fair Use</a>
+  <a href="#contact">ติดต่อ</a>
+</div></nav>
+
+<main>
+
+<div class="cover">
+  <div class="org">CITY FRESH FRUIT CO., LTD. — IT / EDP</div>
+  <h1>Odoo API Developer Guide</h1>
+  <div class="sub">คู่มือเชื่อมต่อดึงข้อมูลระบบ Odoo 14 ผ่าน REST API สำหรับนักพัฒนาและทีมที่ได้รับอนุญาต</div>
+  <div class="meta">
+    <span>📄 เวอร์ชัน: กรกฎาคม 2026 (API v2.0.0)</span>
+    <span>🌐 Base URL: <b>http://192.168.101.104/Odoo</b></span>
+    <span>🔒 ใช้ได้เฉพาะเครือข่ายภายในบริษัท (LAN)</span>
+  </div>
+  <div class="downloads">
+    <a href="CFF-Odoo-API-Guide.pdf" download>⬇ ดาวน์โหลดคู่มือ (PDF)</a>
+    <a href="openapi.yaml" download>⬇ OpenAPI Spec (YAML)</a>
+    <a href="CFF-Odoo-API.postman_collection.json" download>⬇ Postman Collection</a>
+  </div>
+</div>
+
+<h2 id="overview"><span class="no">1</span>ภาพรวม</h2>
+
+<pre><code>แอปของคุณ (ใน LAN) ──HTTP/JSON──&gt;  http://192.168.101.104/Odoo/api/odoo/*
+                                        │  API Gateway (ควบคุมสิทธิ์การอ่าน/เขียน)
+                                        ▼
+                                  ฐานข้อมูล Odoo 14 ของบริษัท</code></pre>
+
+<ul>
+  <li><b>Base URL:</b> <code>http://192.168.101.104/Odoo</code> — เรียกได้เฉพาะจากเครือข่ายภายในบริษัทเท่านั้น</li>
+  <li>API เป็น <b>read-only เป็นหลัก</b> — การเขียนข้อมูล (INSERT) ต้องใช้ token และเปิดสิทธิ์รายตาราง</li>
+  <li>ข้อมูลอ่านจากฐานข้อมูลจริงของ Odoo → ได้ข้อมูลชุดเดียวกับที่เห็นใน Odoo</li>
+  <li>ทุก response เป็น JSON รูปแบบเดียวกัน:</li>
+</ul>
+
+<pre><code>// สำเร็จ
+{ "success": true, "data": ..., "count": 123 }
+
+// ผิดพลาด
+{ "success": false, "error": "คำอธิบายข้อผิดพลาด" }</code></pre>
+
+<h3>การขอสิทธิ์ใช้งาน</h3>
+<div class="tablewrap"><table>
+  <tr><th style="width:45%">ต้องการ</th><th>ต้องทำอะไร</th></tr>
+  <tr><td>อ่านข้อมูล (Read API)</td><td>ไม่ต้องขอ token — เครื่องที่อยู่ใน LAN บริษัทเรียกได้เลย</td></tr>
+  <tr><td>เขียนข้อมูล (INSERT)</td><td>ติดต่อผู้ดูแลระบบ (ฝ่าย IT/EDP) เพื่อ (1) รับ token และ (2) ขอเปิดสิทธิ์ตารางที่ต้องการเขียน</td></tr>
+</table></div>
+
+<h2 id="quickstart"><span class="no">2</span>เริ่มต้นเร็วที่สุด (Quick Start)</h2>
+
+<pre><code># 1) เช็คว่า server ออนไลน์
+curl http://192.168.101.104/Odoo/health
+# → {"status":"ok","message":"Odoo dashboard server is running"}
+
+# 2) ดูรายชื่อตารางทั้งหมดใน Odoo
+curl http://192.168.101.104/Odoo/api/odoo/tables
+
+# 3) ยิง SQL query แรกของคุณ
+curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
+  -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT id, name FROM res_partner ORDER BY id LIMIT 5"}'</code></pre>
+
+<div class="tip">💡 ใช้ Postman? ดาวน์โหลด <a href="CFF-Odoo-API.postman_collection.json" download>Postman Collection</a> แล้ว Import ได้เลย — มีตัวอย่างครบทุก endpoint</div>
+
+<h2 id="read"><span class="no">3</span>Read API (ไม่ต้องใช้ token)</h2>
+
+<h3><span class="method get">GET</span><code>/health</code> — Health check</h3>
+<p>ตรวจว่าระบบทำงานอยู่ ใช้สำหรับ monitoring ได้</p>
+
+<h3><span class="method get">GET</span><code>/api/odoo/tables</code> — รายชื่อตารางทั้งหมด</h3>
+<p>คืนรายชื่อตารางทั้งหมดในฐานข้อมูล Odoo — ใช้สำรวจว่ามีข้อมูลอะไรให้ดึงบ้าง</p>
+<pre><code>{ "success": true, "data": [ { "table_name": "account_move" }, ... ], "count": 500 }</code></pre>
+
+<h3><span class="method get">GET</span><code>/api/odoo/schema/:tableName</code> — โครงสร้างตาราง</h3>
+<p>ดูคอลัมน์ ชนิดข้อมูล และ nullable ของตารางที่สนใจ</p>
+<pre><code>curl http://192.168.101.104/Odoo/api/odoo/schema/res_partner
+
+# → { "success": true, "data": [
+#      { "column_name": "id", "data_type": "integer", "is_nullable": "NO" }, ... ] }</code></pre>
+
+<h3><span class="method post">POST</span><code>/api/odoo/query</code> — SQL query อ่านอย่างเดียว ⭐</h3>
+<p>Endpoint หลักสำหรับดึงข้อมูล — ส่ง SQL ของคุณเองได้อิสระ (อ่านอย่างเดียว)</p>
+<ul>
+  <li>อนุญาตเฉพาะคำสั่งที่ขึ้นต้นด้วย <code>SELECT</code> หรือ <code>WITH</code> <b>คำสั่งเดียว</b> (ห้ามมี <code>;</code> คั่นหลายคำสั่ง) — คำสั่งอื่นถูกปฏิเสธด้วย HTTP <code>403</code></li>
+  <li><b>ใส่ <code>LIMIT</code> เสมอ</b> — query ยิงเข้าฐานข้อมูลที่ระบบงานจริงใช้อยู่ (ดูข้อ <a href="#fairuse">Fair Use</a>)</li>
+  <li>Timestamp ในฐานข้อมูลเก็บเป็น <b>UTC</b> — แปลงเป็นเวลาไทยด้วย <code>AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'</code> (คอลัมน์ชนิด DATE เช่น <code>invoice_date</code> ใช้ตรง ๆ ได้)</li>
+</ul>
+<pre><code>curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
+  -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT name, email FROM res_partner WHERE customer_rank &gt; 0 ORDER BY id DESC LIMIT 20"}'
+
+# → { "success": true, "data": [ { "name": "…", "email": "…" } ], "count": 20 }</code></pre>
+
+<h2 id="write" class="pagebreak-print"><span class="no">4</span>Write API — INSERT (ต้องใช้ token)</h2>
+
+<div class="warn">
+  ⚠️ <b>คำเตือนสำคัญ:</b> การ INSERT ผ่าน API นี้เขียนตรงเข้าฐานข้อมูล จะ<b>ข้าม business logic ของ Odoo ทั้งหมด</b>
+  (เลขรันเอกสาร, ฟิลด์คำนวณ, การตัดสต๊อก, workflow) — ระบบจึงเปิดให้เขียนเฉพาะ<b>ตารางที่ผู้ดูแลอนุญาตเป็นรายตาราง</b>เท่านั้น
+  ตารางเอกสารหลักของ Odoo (<code>sale_order</code>, <code>account_move</code>, <code>stock_move</code> ฯลฯ) จะไม่ได้รับอนุญาตในทุกกรณี
+</div>
+
+<h3>การยืนยันตัวตน</h3>
+<p>ทุกคำขอเขียนต้องแนบ token ที่ได้รับจากผู้ดูแลระบบ อย่างใดอย่างหนึ่ง:</p>
+<pre><code>Authorization: Bearer &lt;token&gt;     ← แนะนำ
+x-api-key: &lt;token&gt;                ← ทางเลือก</code></pre>
+
+<h3><span class="method post">POST</span><code>/api/odoo/insert/:table</code> — เพิ่มข้อมูล</h3>
+<ul>
+  <li>Body: <code>{ "data": {…} }</code> (แถวเดียว) หรือ <code>{ "data": [{…}, …] }</code> (หลายแถว <b>สูงสุด 500</b>)</li>
+  <li>หลายแถวรันใน <b>transaction เดียว</b> — แถวไหนพัง rollback ทั้งหมด</li>
+  <li>ชื่อคอลัมน์ถูกตรวจกับ schema จริงก่อนเสมอ — คอลัมน์ที่ไม่มีในตารางจะได้ <code>400</code> พร้อมระบุคอลัมน์ที่ผิด</li>
+  <li>เติม <code>?dryRun=1</code> เพื่อดู SQL ที่จะรันโดย<b>ไม่เขียนจริง</b> — <b>ใช้ทดสอบก่อนยิงจริงทุกครั้ง</b></li>
+</ul>
+<pre><code># ทดสอบก่อน (ไม่เขียนจริง)
+curl -X POST "http://192.168.101.104/Odoo/api/odoo/insert/my_table?dryRun=1" \
+  -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
+  -d '{"data": {"name": "ทดสอบ", "qty": 5}}'
+
+# ยิงจริง
+curl -X POST http://192.168.101.104/Odoo/api/odoo/insert/my_table \
+  -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
+  -d '{"data": [{"name": "A", "qty": 1}, {"name": "B", "qty": 2}]}'</code></pre>
+<p><b>Response สำเร็จ</b> — คืนแถวที่ insert แล้วทั้งหมด (รวมค่า default เช่น <code>id</code>):</p>
+<pre><code>{ "success": true, "count": 2, "data": [ { "id": 101, "name": "A", "qty": 1 }, … ] }</code></pre>
+
+<h2 id="data"><span class="no">5</span>ข้อควรรู้เมื่อดึงข้อมูล Odoo</h2>
+
+<h3>ตารางหลักที่ใช้บ่อย</h3>
+<div class="tablewrap"><table>
+  <tr><th style="width:38%">ตาราง</th><th>เก็บอะไร</th></tr>
+  <tr><td><code>res_partner</code></td><td>ลูกค้า / ผู้ขาย / ผู้ติดต่อ</td></tr>
+  <tr><td><code>product_product</code> + <code>product_template</code></td><td>สินค้า (join ผ่าน <code>product_tmpl_id</code>)</td></tr>
+  <tr><td><code>sale_order</code> / <code>sale_order_line</code></td><td>ใบสั่งขาย</td></tr>
+  <tr><td><code>account_move</code> / <code>account_move_line</code></td><td>ใบแจ้งหนี้ ใบลดหนี้ และรายการบัญชี</td></tr>
+  <tr><td><code>stock_quant</code></td><td>สต๊อกคงเหลือรายตำแหน่ง (กรอง <code>location_id</code> ที่ <code>stock_location.usage='internal'</code> = ของในคลังจริง)</td></tr>
+  <tr><td><code>pos_order</code></td><td>บิลขายหน้าร้าน (POS)</td></tr>
+</table></div>
+
+<h3>นับยอดขายให้ตรงกับฝ่ายบัญชี</h3>
+<p>ถ้าต้องดึง "ยอดขาย" ให้ใช้เงื่อนไขชุดนี้ ไม่เช่นนั้นตัวเลขจะไม่ตรงกับรายงานของบริษัท:</p>
+<ul>
+  <li>นับเฉพาะ <code>account_move</code> ที่ <code>move_type IN ('out_invoice','out_refund')</code> และ <code>state = 'posted'</code> (Draft ไม่นับ)</li>
+  <li>จำนวนเงินใช้ <code>-aml.balance</code> จาก <code>account_move_line</code> = ยอด<b>ก่อน VAT ในสกุลเงินบริษัท</b> (invoice เป็นบวก, ใบลดหนี้เป็นลบ)</li>
+  <li>กรองเฉพาะบรรทัดสินค้า: <code>aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL</code></li>
+  <li>"วันนี้" ของธุรกิจ = <code>(now() AT TIME ZONE 'Asia/Bangkok')::date</code> เทียบกับ <code>invoice_date</code></li>
+</ul>
+<pre><code>-- ตัวอย่าง: ยอดขายสุทธิเดือนนี้
+SELECT SUM(-aml.balance) AS net_sales
+FROM account_move_line aml
+JOIN account_move am ON am.id = aml.move_id
+WHERE am.move_type IN ('out_invoice','out_refund')
+  AND am.state = 'posted'
+  AND aml.exclude_from_invoice_tab = false
+  AND aml.display_type IS NULL
+  AND date_trunc('month', am.invoice_date) =
+      date_trunc('month', (now() AT TIME ZONE 'Asia/Bangkok')::date)</code></pre>
+
+<h2 id="errors"><span class="no">6</span>Error Codes</h2>
+
+<div class="tablewrap"><table>
+  <tr><th style="width:10%">HTTP</th><th style="width:30%">ความหมาย</th><th>เจอเมื่อ</th></tr>
+  <tr><td><code>400</code></td><td>คำขอผิดรูปแบบ</td><td>ไม่ส่ง <code>sql</code>, คอลัมน์ไม่มีในตาราง, data เกิน 500 แถว, ข้อมูลขัด constraint ของตาราง</td></tr>
+  <tr><td><code>401</code></td><td>token ผิดหรือไม่ได้ส่ง</td><td>Write API ทุกตัว</td></tr>
+  <tr><td><code>403</code></td><td>ไม่อนุญาต</td><td>query ที่ไม่ใช่ SELECT/WITH, ตารางยังไม่ได้รับสิทธิ์ insert</td></tr>
+  <tr><td><code>404</code></td><td>ไม่พบ</td><td>ตารางไม่มีในฐานข้อมูล</td></tr>
+  <tr><td><code>503</code></td><td>Write API ยังไม่เปิดใช้งาน</td><td>ระบบยังไม่เปิดรับการเขียนข้อมูล — ติดต่อผู้ดูแล</td></tr>
+  <tr><td><code>500</code></td><td>ข้อผิดพลาดฝั่งระบบ</td><td>ดูรายละเอียดในฟิลด์ <code>error</code> แล้วแจ้งผู้ดูแล</td></tr>
+</table></div>
+<p>ทุก error มี body: <code>{ "success": false, "error": "…" }</code></p>
+
+<h2 id="examples" class="pagebreak-print"><span class="no">7</span>ตัวอย่างโค้ดภาษาต่าง ๆ</h2>
+
+<h3>JavaScript (fetch)</h3>
+<pre><code>const BASE = 'http://192.168.101.104/Odoo';
+
+const q = await fetch(`${BASE}/api/odoo/query`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ sql: 'SELECT name FROM res_partner LIMIT 5' }),
+}).then(r =&gt; r.json());
+
+if (!q.success) throw new Error(q.error);
+console.log(q.data);</code></pre>
+
+<h3>Python (requests)</h3>
+<pre><code>import requests
+
+BASE = 'http://192.168.101.104/Odoo'
+
+# SQL query
+r = requests.post(f'{BASE}/api/odoo/query',
+                  json={'sql': 'SELECT name FROM res_partner LIMIT 5'})
+body = r.json()
+assert body['success'], body.get('error')
+print(body['data'])
+
+# INSERT (ต้องมี token + ตารางได้รับสิทธิ์แล้ว)
+r = requests.post(f'{BASE}/api/odoo/insert/my_table',
+                  headers={'Authorization': 'Bearer &lt;token&gt;'},
+                  json={'data': {'name': 'ทดสอบ', 'qty': 5}})</code></pre>
+
+<h3>PHP (cURL)</h3>
+<pre><code>$base = 'http://192.168.101.104/Odoo';
+
+$ch = curl_init("$base/api/odoo/query");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER =&gt; true,
+    CURLOPT_POST =&gt; true,
+    CURLOPT_HTTPHEADER =&gt; ['Content-Type: application/json'],
+    CURLOPT_POSTFIELDS =&gt; json_encode(['sql' =&gt; 'SELECT name FROM res_partner LIMIT 5']),
+]);
+$body = json_decode(curl_exec($ch), true);
+curl_close($ch);
+if (!$body['success']) { die($body['error']); }
+print_r($body['data']);</code></pre>
+
+<h3>Excel / Power BI (Power Query)</h3>
+<div class="tip">
+  <code>Data → Get Data → From Web</code> — Power Query รองรับเฉพาะ GET จึงเหมาะกับ
+  <code>/api/odoo/tables</code> และ <code>/api/odoo/schema/:table</code><br>
+  ถ้าต้องการผลลัพธ์ SQL ใน Excel ให้ใช้ <code>Web.Contents</code> แบบ POST:
+  <pre><code>let
+  Source = Json.Document(Web.Contents(
+    "http://192.168.101.104/Odoo/api/odoo/query",
+    [ Headers = [#"Content-Type"="application/json"],
+      Content = Json.FromValue([sql = "SELECT name FROM res_partner LIMIT 100"]) ])),
+  Rows = Table.FromRecords(Source[data])
+in
+  Rows</code></pre>
+</div>
+
+<h2 id="fairuse"><span class="no">8</span>ข้อควรปฏิบัติ (Fair Use)</h2>
+
+<ol>
+  <li><b>ใส่ <code>LIMIT</code> ทุก query</b> — ฐานข้อมูลนี้คือตัวเดียวกับที่ระบบงานหลักของบริษัทใช้อยู่ query หนักกระทบผู้ใช้ Odoo ทั้งบริษัท</li>
+  <li><b>อย่า <code>SELECT *</code> จากตารางใหญ่</b> (<code>account_move_line</code>, <code>stock_move_line</code> มีหลายล้านแถว) — เลือกคอลัมน์และกรองช่วงเวลาเสมอ</li>
+  <li><b>อย่า polling ถี่เกินจำเป็น</b> — ข้อมูลส่วนใหญ่ไม่ได้เปลี่ยนทุกวินาที ตกลงรอบดึงข้อมูลที่เหมาะกับงานของคุณกับผู้ดูแล</li>
+  <li><b>การเขียนข้อมูล</b> ให้ทดสอบด้วย <code>?dryRun=1</code> ก่อนทุกครั้ง</li>
+  <li><b>ข้อมูลที่ได้เป็นข้อมูลภายในบริษัท</b> — ห้ามนำไปเผยแพร่หรือส่งต่อภายนอกโดยไม่ได้รับอนุญาต</li>
+  <li>ถ้าต้องใช้ query ซับซ้อนซ้ำ ๆ เป็นประจำ แจ้งผู้ดูแลให้ทำเป็น endpoint เฉพาะ (มี cache) จะเร็วกว่าและเบากับระบบกว่า</li>
+</ol>
+
+<h2 id="contact"><span class="no">9</span>ติดต่อ / แจ้งปัญหา</h2>
+
+<ul>
+  <li><b>ผู้ดูแลระบบ:</b> ฝ่าย IT/EDP — ขอ token, ขอเปิดสิทธิ์ตาราง INSERT, ขอ endpoint ใหม่</li>
+  <li><b>ตรวจสถานะระบบ:</b> <code>GET /health</code> — ถ้าไม่ตอบให้แจ้งผู้ดูแลระบบ</li>
+  <li><b>เครื่องมือสำหรับนักพัฒนา:</b>
+    <a href="openapi.yaml" download>OpenAPI Spec</a> ·
+    <a href="CFF-Odoo-API.postman_collection.json" download>Postman Collection</a> ·
+    <a href="CFF-Odoo-API-Guide.pdf" download>คู่มือฉบับ PDF</a>
+  </li>
+</ul>
+
+<div class="footer-note">
+  CFF Odoo API Developer Guide — จัดทำโดยฝ่าย IT/EDP, CITY FRESH FRUIT CO., LTD. · เอกสารภายในบริษัท ห้ามเผยแพร่ภายนอก · กรกฎาคม 2026
+</div>
+
+</main>
+</body>
+</html>
