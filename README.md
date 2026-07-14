@@ -80,7 +80,8 @@ curl -X POST http://192.168.101.104/Odoo/api/odoo/insert/my_table \
 ### อัปเดตเวอร์ชันใหม่
 
 ```bash
-ssh root@192.168.101.104
+ssh <user>@192.168.101.104      # login root ตรงถูกปิด (นโยบาย SIEM) — ใช้ user ส่วนตัว
+sudo su                          # ยกสิทธิ์ root ผ่าน sudo เท่านั้น
 cd /Odoo/odoo-integration && git pull origin master
 npm install --production        # เฉพาะเมื่อ dependencies เปลี่ยน
 systemctl restart odoo-dashboard
