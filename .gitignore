@@ -30,3 +30,6 @@ Thumbs.db
 
 # Write API config (local, not in git)
 writable-tables.json
+
+# สำเนา PDF ที่ root ไว้ส่งต่อทาง email (ตัวจริงอยู่ public/CFF-Odoo-API-Guide.pdf)
+/CFF-Odoo-API-Guide.pdf
