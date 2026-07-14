@@ -52,11 +52,11 @@
     .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-right: 6px; animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
     .badge { font-size: 0.75rem; color: var(--text-secondary); }
-    button.btn {
+    a.btn, button.btn {
       background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary);
       padding: 0.4rem 0.9rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit;
     }
-    button.btn:hover { border-color: var(--accent); }
+    a.btn:hover, button.btn:hover { border-color: var(--accent); }
     button.btn:focus-visible, .bu-chip:focus-visible, .period-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .container { max-width: 1400px; margin: 0 auto; padding: 1.25rem 1.5rem 3rem; }
@@ -143,6 +143,7 @@
     </div>
     <div class="header-right">
       <span class="badge"><span class="live-dot"></span>LIVE</span>
+      <a class="btn" href="insights" style="text-decoration:none;display:inline-block">📊 Data Insight</a>
       <button class="btn" onclick="loadDashboard(true)">⟳ รีเฟรช</button>
       <button class="btn" onclick="toggleTheme()">◐ ธีม</button>
     </div>

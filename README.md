@@ -45,6 +45,7 @@ Dashboard ผู้บริหารของ CITY FRESH FRUIT — ดึงข
 | `GET /` | หน้า dashboard |
 | `GET /api/odoo/dashboard?bu=all|<ชื่อ BU>&period=today|month|year` | ข้อมูลทั้งหน้า (KPI, ตาราง BU, เทรนด์ 14 วัน, สินค้าขายดี, เอกสารล่าสุด, แจ้งเตือน) |
 | `GET /api/odoo/business-units` | รายชื่อ BU ที่มียอดปีนี้ + ยอดสุทธิ |
+| `GET /insights` + `GET /api/odoo/insights` | หน้า Data Insight: segment ลูกค้า (RFM-lite), top ลูกค้า MTD, ลูกค้าใหม่/ซื้อซ้ำ, รายชื่อ win-back + เบอร์โทร, สินค้ามาแรง/แผ่ว, คู่สินค้าซื้อด้วยกัน, BU/ทีมขาย, วันขายดี, เทรนด์ 12 เดือน (cache 5 นาที) |
 | `GET /api/odoo/tables`, `GET /api/odoo/schema/:table` | สำรวจ schema (dev) |
 | `POST /api/odoo/query` `{sql}` | query อ่านอย่างเดียว (SELECT/WITH คำสั่งเดียว) |
 | `GET /health` | health check |

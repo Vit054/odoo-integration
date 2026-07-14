@@ -33,9 +33,9 @@ const PERIODS = {
 // Simple in-memory cache (queries hit prod DB)
 const cache = new Map();
 const CACHE_TTL_MS = 60 * 1000;
-function cached(key, fn) {
+function cached(key, fn, ttl = CACHE_TTL_MS) {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return Promise.resolve(hit.data);
+  if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.data);
   return fn().then((data) => {
     cache.set(key, { at: Date.now(), data });
     return data;
@@ -210,6 +210,226 @@ async function buildDashboard(buName, period) {
     recentDocs,
     lowStock: lowStockRows,
     alerts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Data Insight: พฤติกรรมลูกค้า / สินค้า / ช่องทางขาย / มุม campaign
+// เทียบเดือน = MTD ปัจจุบัน vs ช่วงวันเดียวกันของเดือนก่อน (กันเดือนยังไม่จบแล้วดูเหมือนตก)
+
+const CUR_MTD = `date_trunc('month', am.invoice_date) = date_trunc('month', ${TODAY_BKK})`;
+const PREV_MTD = `am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+                  AND am.invoice_date <= (${TODAY_BKK} - interval '1 month')::date`;
+const POSTED_OUT = `am.move_type IN ('out_invoice','out_refund') AND am.state = 'posted'`;
+
+// GET /api/odoo/insights - ข้อมูล insight ทั้งชุด (cache 5 นาที)
+router.get('/insights', async (req, res) => {
+  try {
+    const data = await cached('insights', buildInsights, 5 * 60 * 1000);
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('insights error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+async function buildInsights() {
+  const [segments, topCustomers, newVsReturning, winback, champions,
+         rising, falling, categoryMix, crossSell,
+         buGrowth, teamMix, dayOfWeek, invoiceMonthly, posMonthly] = await Promise.all([
+
+    // ---- ลูกค้า: แบ่ง segment ตาม recency/frequency (12 เดือน, ระดับใบ) ----
+    one(`WITH cust AS (
+           SELECT am.partner_id, MAX(am.invoice_date) AS last_buy,
+                  COUNT(*)::int AS freq, SUM(am.amount_untaxed_signed) AS amt
+           FROM account_move am
+           WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+             AND am.invoice_date >= ${TODAY_BKK} - 365
+           GROUP BY 1)
+         SELECT CASE
+             WHEN last_buy >= ${TODAY_BKK} - 30 AND freq >= 12 THEN 'champions'
+             WHEN last_buy >= ${TODAY_BKK} - 30 THEN 'active'
+             WHEN last_buy >= ${TODAY_BKK} - 90 THEN 'cooling'
+             ELSE 'atrisk' END AS segment,
+           COUNT(*)::int AS customers,
+           ROUND(SUM(amt))::float AS value_12m
+         FROM cust GROUP BY 1`),
+
+    // ---- ลูกค้า: Top 10 เดือนนี้ เทียบ MTD เดือนก่อน ----
+    one(`WITH cur AS (
+           SELECT am.partner_id, SUM(am.amount_untaxed_signed) AS amt, COUNT(*)::int AS docs
+           FROM account_move am WHERE ${POSTED_OUT} AND ${CUR_MTD} GROUP BY 1),
+         prev AS (
+           SELECT am.partner_id, SUM(am.amount_untaxed_signed) AS amt
+           FROM account_move am WHERE ${POSTED_OUT} AND ${PREV_MTD} GROUP BY 1)
+         SELECT rp.name, ROUND(cur.amt)::float AS amt, cur.docs,
+                ROUND(COALESCE(prev.amt, 0))::float AS prev_amt
+         FROM cur JOIN res_partner rp ON rp.id = cur.partner_id
+         LEFT JOIN prev ON prev.partner_id = cur.partner_id
+         ORDER BY cur.amt DESC LIMIT 10`),
+
+    // ---- ลูกค้า: ใหม่ vs กลับมาซื้อซ้ำ รายเดือน 6 เดือน ----
+    one(`WITH firstbuy AS (
+           SELECT partner_id, MIN(invoice_date) AS first_date
+           FROM account_move WHERE move_type = 'out_invoice' AND state = 'posted' GROUP BY 1)
+         SELECT to_char(date_trunc('month', am.invoice_date), 'YYYY-MM') AS month,
+                COUNT(DISTINCT am.partner_id) FILTER
+                  (WHERE date_trunc('month', fb.first_date) = date_trunc('month', am.invoice_date))::int AS new_customers,
+                COUNT(DISTINCT am.partner_id) FILTER
+                  (WHERE date_trunc('month', fb.first_date) < date_trunc('month', am.invoice_date))::int AS returning
+         FROM account_move am JOIN firstbuy fb ON fb.partner_id = am.partner_id
+         WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '5 months')
+         GROUP BY 1 ORDER BY 1`),
+
+    // ---- Campaign: ลูกค้าหายไป (เคยซื้อประจำใน 6 เดือน แต่เงียบเกิน 45 วัน) ----
+    one(`SELECT rp.name, COALESCE(rp.mobile, rp.phone) AS tel,
+                MAX(am.invoice_date)::text AS last_buy,
+                (${TODAY_BKK} - MAX(am.invoice_date))::int AS days_silent,
+                COUNT(*)::int AS docs_6m,
+                ROUND(SUM(am.amount_untaxed_signed))::float AS amt_6m
+         FROM account_move am JOIN res_partner rp ON rp.id = am.partner_id
+         WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+           AND am.invoice_date >= ${TODAY_BKK} - 180
+         GROUP BY rp.id, rp.name, rp.mobile, rp.phone
+         HAVING MAX(am.invoice_date) < ${TODAY_BKK} - 45 AND COUNT(*) >= 3
+         ORDER BY amt_6m DESC LIMIT 15`),
+
+    // ---- Campaign: Champions/VIP (ซื้อถี่ + ยังซื้ออยู่ ใน 12 เดือน) ----
+    one(`SELECT rp.name, COALESCE(rp.mobile, rp.phone) AS tel,
+                COUNT(*)::int AS docs_12m,
+                ROUND(SUM(am.amount_untaxed_signed))::float AS amt_12m,
+                MAX(am.invoice_date)::text AS last_buy
+         FROM account_move am JOIN res_partner rp ON rp.id = am.partner_id
+         WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+           AND am.invoice_date >= ${TODAY_BKK} - 365
+         GROUP BY rp.id, rp.name, rp.mobile, rp.phone
+         HAVING MAX(am.invoice_date) >= ${TODAY_BKK} - 30 AND COUNT(*) >= 12
+         ORDER BY amt_12m DESC LIMIT 10`),
+
+    // ---- สินค้า: มาแรง (MTD vs MTD เดือนก่อน) ----
+    one(`SELECT pt.name,
+                ROUND(SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END))::float AS cur_amt,
+                ROUND(SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END))::float AS prev_amt
+         FROM account_move_line aml
+         JOIN account_move am ON am.id = aml.move_id
+         JOIN product_product pp ON pp.id = aml.product_id
+         JOIN product_template pt ON pt.id = pp.product_tmpl_id
+         WHERE ${POSTED_OUT} AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+         GROUP BY pt.name
+         HAVING GREATEST(SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END),
+                         SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END)) > 10000
+         ORDER BY SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END)
+                - SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END) DESC
+         LIMIT 8`),
+
+    // ---- สินค้า: แผ่ว (โครงเดียวกัน กลับทิศ) ----
+    one(`SELECT pt.name,
+                ROUND(SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END))::float AS cur_amt,
+                ROUND(SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END))::float AS prev_amt
+         FROM account_move_line aml
+         JOIN account_move am ON am.id = aml.move_id
+         JOIN product_product pp ON pp.id = aml.product_id
+         JOIN product_template pt ON pt.id = pp.product_tmpl_id
+         WHERE ${POSTED_OUT} AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+         GROUP BY pt.name
+         HAVING GREATEST(SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END),
+                         SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END)) > 10000
+         ORDER BY SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END)
+                - SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END) ASC
+         LIMIT 8`),
+
+    // ---- สินค้า: สัดส่วนตามหมวด (เดือนนี้) ----
+    one(`SELECT split_part(pc.complete_name, ' / ', 2)
+                || COALESCE(' / ' || NULLIF(split_part(pc.complete_name, ' / ', 3), ''), '') AS category,
+                ROUND(SUM(-aml.balance))::float AS net
+         FROM account_move_line aml
+         JOIN account_move am ON am.id = aml.move_id
+         JOIN product_product pp ON pp.id = aml.product_id
+         JOIN product_template pt ON pt.id = pp.product_tmpl_id
+         JOIN product_category pc ON pc.id = pt.categ_id
+         WHERE ${POSTED_OUT} AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL
+           AND ${CUR_MTD}
+         GROUP BY 1 ORDER BY net DESC LIMIT 8`),
+
+    // ---- Campaign: สินค้าที่ถูกซื้อคู่กันบ่อย (90 วัน) → จัด bundle/cross-sell ----
+    one(`WITH lines AS (
+           SELECT DISTINCT aml.move_id, aml.product_id
+           FROM account_move_line aml JOIN account_move am ON am.id = aml.move_id
+           WHERE am.move_type = 'out_invoice' AND am.state = 'posted'
+             AND am.invoice_date >= ${TODAY_BKK} - 90
+             AND aml.product_id IS NOT NULL
+             AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL)
+         SELECT pt1.name AS p1, pt2.name AS p2, COUNT(*)::int AS together
+         FROM lines a
+         JOIN lines b ON a.move_id = b.move_id AND a.product_id < b.product_id
+         JOIN product_product pp1 ON pp1.id = a.product_id
+         JOIN product_template pt1 ON pt1.id = pp1.product_tmpl_id
+         JOIN product_product pp2 ON pp2.id = b.product_id
+         JOIN product_template pt2 ON pt2.id = pp2.product_tmpl_id
+         GROUP BY pt1.name, pt2.name ORDER BY together DESC LIMIT 10`),
+
+    // ---- ช่องทาง: BU เดือนนี้ vs MTD เดือนก่อน ----
+    one(`SELECT COALESCE(bu.name, '(ไม่ระบุ BU)') AS bu,
+                ROUND(SUM(CASE WHEN ${CUR_MTD} THEN -aml.balance ELSE 0 END))::float AS cur_amt,
+                ROUND(SUM(CASE WHEN ${PREV_MTD} THEN -aml.balance ELSE 0 END))::float AS prev_amt
+         FROM account_move_line aml
+         JOIN account_move am ON am.id = aml.move_id
+         LEFT JOIN cu_business_unit bu ON bu.id = aml.business_unit_id
+         WHERE ${POSTED_OUT} AND aml.exclude_from_invoice_tab = false AND aml.display_type IS NULL
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+         GROUP BY 1 ORDER BY cur_amt DESC`),
+
+    // ---- ช่องทาง: ทีมขาย/ช่องทางเอกสาร (crm_team) เดือนนี้ ----
+    one(`SELECT COALESCE(ct.name, '(ไม่ระบุ)') AS team, COUNT(*)::int AS docs,
+                ROUND(SUM(am.amount_untaxed_signed))::float AS amt
+         FROM account_move am LEFT JOIN crm_team ct ON ct.id = am.team_id
+         WHERE ${POSTED_OUT} AND ${CUR_MTD}
+         GROUP BY 1 ORDER BY amt DESC LIMIT 8`),
+
+    // ---- ช่องทาง: ยอดตามวันในสัปดาห์ (90 วัน) → เลือกวันจัด campaign ----
+    one(`SELECT EXTRACT(ISODOW FROM am.invoice_date)::int AS dow,
+                COUNT(*)::int AS docs,
+                ROUND(SUM(am.amount_untaxed_signed))::float AS net
+         FROM account_move am
+         WHERE ${POSTED_OUT} AND am.invoice_date >= ${TODAY_BKK} - 90
+         GROUP BY 1 ORDER BY 1`),
+
+    // ---- ช่องทาง: ยอด invoice รายเดือน 12 เดือน ----
+    one(`SELECT to_char(date_trunc('month', am.invoice_date), 'YYYY-MM') AS month,
+                ROUND(SUM(am.amount_untaxed_signed))::float AS net
+         FROM account_move am
+         WHERE ${POSTED_OUT}
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK}) - interval '11 months'
+         GROUP BY 1 ORDER BY 1`),
+
+    // ---- ช่องทาง: ยอด POS รายเดือน 12 เดือน ----
+    one(`SELECT to_char(date_trunc('month', (po.date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')), 'YYYY-MM') AS month,
+                COUNT(*)::int AS orders,
+                ROUND(SUM(po.amount_total))::float AS total
+         FROM pos_order po
+         WHERE po.state IN ('paid','done','invoiced')
+           AND (po.date_order AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')
+               >= date_trunc('month', ${TODAY_BKK}) - interval '11 months'
+         GROUP BY 1 ORDER BY 1`),
+  ]);
+
+  // รวม invoice + POS รายเดือนเป็นชุดเดียว
+  const posByMonth = new Map(posMonthly.map((r) => [r.month, r]));
+  const monthly = invoiceMonthly.map((r) => ({
+    month: r.month,
+    invoice: r.net,
+    pos: (posByMonth.get(r.month) || {}).total || 0,
+    posOrders: (posByMonth.get(r.month) || {}).orders || 0,
+  }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    customer: { segments, topCustomers, newVsReturning, winback, champions },
+    product: { rising, falling, categoryMix, crossSell },
+    channel: { buGrowth, teamMix, dayOfWeek, monthly },
   };
 }
 

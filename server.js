@@ -22,6 +22,10 @@ app.get('/config', (req, res) => {
 app.get('/APIGuide', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'api-guide.html'));
 });
+// Data Insight: ลูกค้า/สินค้า/ช่องทาง (behind Apache = /Odoo/insights)
+app.get('/insights', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'insights.html'));
+});
 
 // Odoo API routes
 const odooApi = require('./odoo-api');
@@ -41,6 +45,8 @@ app.get('/api', (req, res) => {
       'GET /': 'Executive dashboard UI',
       'GET /APIGuide': 'API guideline สำหรับทีมภายนอก (หน้าเว็บ + ลิงก์ PDF/OpenAPI/Postman)',
       'GET /api/odoo/dashboard?teamId=all|N': 'Dashboard data (real-time, 60s cache)',
+      'GET /insights': 'หน้า Data Insight (ลูกค้า/สินค้า/ช่องทาง/campaign)',
+      'GET /api/odoo/insights': 'ข้อมูล insight ทั้งชุด (cache 5 นาที)',
       'GET /api/odoo/business-units': 'Sales teams with volume this year',
       'GET /api/odoo/tables': 'List database tables',
       'GET /api/odoo/schema/:tableName': 'Table schema',
