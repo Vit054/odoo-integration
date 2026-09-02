@@ -434,6 +434,145 @@ async function buildInsights() {
 }
 
 // ---------------------------------------------------------------------------
+// เปรียบเทียบยอดขาย: รายปี (YoY) + เดือนต่อเดือน (MoM)
+// ปีปัจจุบันยังไม่จบ → เทียบปีด้วย "ช่วงวันเดียวกัน" (MM-DD ≤ วันนี้) ควบคู่กับยอดทั้งปี
+// เดือนเทียบ 2 มุม: เดือนก่อนหน้า (ช่วงวันเดียวกัน) และเดือนเดียวกันปีก่อน (ช่วงวันเดียวกัน)
+
+const SAME_DAY_OF_YEAR = `to_char(am.invoice_date, 'MM-DD') <= to_char(${TODAY_BKK}, 'MM-DD')`;
+const MONTHS_BACK = 24; // 12 เดือนที่แสดง + 12 เดือนก่อนหน้าไว้เทียบ YoY
+
+// GET /api/odoo/sales-compare?bu=all|<ชื่อ BU>&years=5
+router.get('/sales-compare', async (req, res) => {
+  const buName = req.query.bu && req.query.bu !== 'all' ? String(req.query.bu) : null;
+  let years = parseInt(req.query.years, 10);
+  if (!Number.isFinite(years)) years = 5;
+  years = Math.min(10, Math.max(2, years));
+
+  try {
+    const data = await cached(`sales-compare:${buName || 'all'}:${years}`,
+      () => buildSalesCompare(buName, years), 5 * 60 * 1000);
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('sales-compare error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+async function buildSalesCompare(buName, years) {
+  const p = buName ? [buName] : [];
+  const buFilter = buName ? 'AND bu.name = $1' : '';
+
+  const [yearRows, monthRows, mtdRows] = await Promise.all([
+
+    // ---- รายปี: ยอดทั้งปี + ยอดถึงวันเดียวกันของแต่ละปี (เทียบกันได้จริง) ----
+    one(`SELECT date_part('year', am.invoice_date)::int AS year,
+                ${INV_AMT} AS invoice, ${CN_AMT} AS cn, ${NET_AMT} AS net,
+                COUNT(DISTINCT am.id)::int AS docs,
+                COUNT(DISTINCT date_trunc('month', am.invoice_date))::int AS months,
+                COALESCE(SUM(CASE WHEN ${SAME_DAY_OF_YEAR} THEN -aml.balance END), 0)::float AS ytd_net,
+                COUNT(DISTINCT am.id) FILTER (WHERE ${SAME_DAY_OF_YEAR})::int AS ytd_docs
+         ${DOC_BASE}
+           AND am.invoice_date >= date_trunc('year', ${TODAY_BKK} - interval '${years - 1} years')
+           ${buFilter}
+         GROUP BY 1 ORDER BY 1`, p),
+
+    // ---- รายเดือน 24 เดือน (เติมเดือนที่ไม่มียอดให้เป็น 0 เพื่อให้กราฟไม่ขาด) ----
+    one(`WITH months AS (
+           SELECT generate_series(date_trunc('month', ${TODAY_BKK}) - interval '${MONTHS_BACK - 1} months',
+                                  date_trunc('month', ${TODAY_BKK}), interval '1 month') AS mo
+         ), data AS (
+           SELECT date_trunc('month', am.invoice_date) AS mo,
+                  ${INV_AMT} AS invoice, ${CN_AMT} AS cn, ${NET_AMT} AS net,
+                  COUNT(DISTINCT am.id)::int AS docs
+           ${DOC_BASE}
+             AND am.invoice_date >= date_trunc('month', ${TODAY_BKK}) - interval '${MONTHS_BACK - 1} months'
+             ${buFilter}
+           GROUP BY 1
+         )
+         SELECT to_char(months.mo, 'YYYY-MM') AS month,
+                COALESCE(data.invoice, 0)::float AS invoice,
+                COALESCE(data.cn, 0)::float AS cn,
+                COALESCE(data.net, 0)::float AS net,
+                COALESCE(data.docs, 0)::int AS docs
+         FROM months LEFT JOIN data ON data.mo = months.mo
+         ORDER BY 1`, p),
+
+    // ---- MTD: เดือนนี้ vs เดือนก่อน vs เดือนเดียวกันปีก่อน (ตัดที่วันเดียวกันทั้ง 3 ช่วง) ----
+    one(`SELECT ${TODAY_BKK}::text AS as_of,
+                to_char(${TODAY_BKK}, 'YYYY-MM') AS cur_month,
+                to_char(${TODAY_BKK} - interval '1 month', 'YYYY-MM') AS prev_month,
+                to_char(${TODAY_BKK} - interval '1 year', 'YYYY-MM') AS ly_month,
+                COALESCE(SUM(CASE WHEN am.invoice_date >= date_trunc('month', ${TODAY_BKK})
+                                   AND am.invoice_date <= ${TODAY_BKK}
+                             THEN -aml.balance END), 0)::float AS cur_net,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.invoice_date >= date_trunc('month', ${TODAY_BKK})
+                                                AND am.invoice_date <= ${TODAY_BKK})::int AS cur_docs,
+                COALESCE(SUM(CASE WHEN am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+                                   AND am.invoice_date <= (${TODAY_BKK} - interval '1 month')::date
+                             THEN -aml.balance END), 0)::float AS prev_net,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 month')
+                                                AND am.invoice_date <= (${TODAY_BKK} - interval '1 month')::date)::int AS prev_docs,
+                COALESCE(SUM(CASE WHEN am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 year')
+                                   AND am.invoice_date <= (${TODAY_BKK} - interval '1 year')::date
+                             THEN -aml.balance END), 0)::float AS ly_net,
+                COUNT(DISTINCT am.id) FILTER (WHERE am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 year')
+                                                AND am.invoice_date <= (${TODAY_BKK} - interval '1 year')::date)::int AS ly_docs
+         ${DOC_BASE}
+           AND am.invoice_date >= date_trunc('month', ${TODAY_BKK} - interval '1 year')
+           ${buFilter}`, p),
+  ]);
+
+  const t = mtdRows[0];
+  const byMonth = new Map(monthRows.map((r) => [r.month, r]));
+
+  // เดือนที่แสดง = 12 เดือนล่าสุด, แนบยอดเดือนก่อนหน้า (MoM) และเดือนเดียวกันปีก่อน (YoY)
+  const monthly = monthRows.slice(-12).map((r) => {
+    const prev = byMonth.get(shiftMonth(r.month, -1));
+    const ly = byMonth.get(shiftMonth(r.month, -12));
+    return {
+      month: r.month,
+      net: r.net,
+      invoice: r.invoice,
+      cn: r.cn,
+      docs: r.docs,
+      prevNet: prev ? prev.net : null,       // เดือนก่อนหน้า (เต็มเดือน)
+      lastYearNet: ly ? ly.net : null,       // เดือนเดียวกันปีก่อน
+    };
+  });
+
+  const yearly = yearRows.map((r) => ({
+    year: r.year,
+    invoice: r.invoice,
+    cn: r.cn,
+    net: r.net,
+    docs: r.docs,
+    months: r.months,          // จำนวนเดือนที่มีเอกสาร — ใช้บอกว่าปีนั้นข้อมูลเต็มปีไหม
+    ytdNet: r.ytd_net,         // ยอดถึง MM-DD เดียวกับวันนี้
+    ytdDocs: r.ytd_docs,
+  }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    bu: buName || 'all',
+    asOf: t.as_of,
+    yearly,
+    monthly,
+    mtd: {
+      current: { month: t.cur_month, net: t.cur_net, docs: t.cur_docs },
+      prevMonth: { month: t.prev_month, net: t.prev_net, docs: t.prev_docs },
+      lastYear: { month: t.ly_month, net: t.ly_net, docs: t.ly_docs },
+    },
+  };
+}
+
+// 'YYYY-MM' + n เดือน
+function shiftMonth(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const total = y * 12 + (m - 1) + n;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------------------
 // Generic/dev endpoints (read-only)
 
 router.get('/tables', async (req, res) => {

@@ -140,11 +140,47 @@ curl "http://192.168.101.104/Odoo/api/odoo/dashboard?bu=Horeca&period=today"
 
 BU ที่มีในระบบ: Modern Trade (ห้าง), Traditional trade (ยี่ปั๊ว), Horeca, CLMV, Consignment, Direct sales, Retail store, Center
 
-### 3.5 `GET /api/odoo/tables` — รายชื่อตารางทั้งหมดใน database
+### 3.5 `GET /api/odoo/sales-compare` — เปรียบเทียบยอดขาย รายปี (YoY) / รายเดือน (MoM)
+
+```bash
+curl "http://192.168.101.104/Odoo/api/odoo/sales-compare?bu=all&years=5"
+```
+
+| Query param | ค่า | ค่าเริ่มต้น |
+|---|---|---|
+| `bu` | `all` หรือชื่อ BU (เช่น `Modern Trade (ห้าง)`) | `all` |
+| `years` | จำนวนปีย้อนหลังในตารางรายปี (2–10) | `5` |
+
+cache 5 นาที · ตัวเลขทั้งหมดคือยอดสุทธิ Invoice − CN ก่อน VAT (สูตรเดียวกับหน้า dashboard)
+
+```json
+{ "success": true, "data": {
+  "asOf": "2026-09-02",              // วันที่ตัดยอด (เวลาไทย)
+  "yearly": [                        // เรียงจากปีเก่าไปใหม่
+    { "year": 2025, "invoice": 0, "cn": 0, "net": 0, "docs": 0,
+      "months": 12,                  // จำนวนเดือนที่มีเอกสาร (< 12 = ข้อมูลไม่เต็มปี)
+      "ytdNet": 0, "ytdDocs": 0 }    // ยอดถึง MM-DD เดียวกับ asOf ของปีนั้น ← ใช้เทียบ YoY
+  ],
+  "monthly": [                       // 12 เดือนล่าสุด
+    { "month": "2026-08", "invoice": 0, "cn": 0, "net": 0, "docs": 0,
+      "prevNet": 0,                  // เดือนก่อนหน้า (เต็มเดือน) ← MoM
+      "lastYearNet": 0 }             // เดือนเดียวกันปีก่อน ← YoY
+  ],
+  "mtd": {                           // ตัดที่วันเดียวกันทั้ง 3 ช่วง (เดือนปัจจุบันยังไม่จบ)
+    "current":   { "month": "2026-09", "net": 0, "docs": 0 },
+    "prevMonth": { "month": "2026-08", "net": 0, "docs": 0 },
+    "lastYear":  { "month": "2025-09", "net": 0, "docs": 0 }
+  }
+}}
+```
+
+> ⚠️ ปีก่อน go-live Odoo (ก.พ. 2025) มีแต่เอกสารตกค้างจำนวนน้อย — % เติบโตของปี/เดือนที่ฐานเป็นข้อมูลชุดนั้นจะพุ่งผิดปกติ ใช้อ้างอิงไม่ได้
+
+### 3.6 `GET /api/odoo/tables` — รายชื่อตารางทั้งหมดใน database
 
 ใช้สำรวจ schema (สำหรับ dev) — คืน `[{ "table_name": "account_move" }, ...]`
 
-### 3.6 `GET /api/odoo/schema/:tableName` — โครงสร้างตาราง
+### 3.7 `GET /api/odoo/schema/:tableName` — โครงสร้างตาราง
 
 ```bash
 curl http://192.168.101.104/Odoo/api/odoo/schema/account_move
@@ -152,7 +188,7 @@ curl http://192.168.101.104/Odoo/api/odoo/schema/account_move
 
 คืน `[{ "column_name": "id", "data_type": "integer", "is_nullable": "NO" }, ...]`
 
-### 3.7 `POST /api/odoo/query` — SQL query อ่านอย่างเดียว ⭐
+### 3.8 `POST /api/odoo/query` — SQL query อ่านอย่างเดียว ⭐
 
 Endpoint ที่ยืดหยุ่นที่สุด — ส่ง SQL ของคุณเองได้ (SELECT เท่านั้น)
 

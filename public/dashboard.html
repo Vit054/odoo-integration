@@ -115,6 +115,17 @@
     .mini-stat .l { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; }
     .mini-stat .v { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 
+    .cmp-stats { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+    .cmp-stat { flex: 1 1 170px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 0.55rem 0.8rem; }
+    .cmp-stat .l { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; }
+    .cmp-stat .v { font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .cmp-stat .d { font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+    .cmp-stat.hi { border-color: var(--accent); }
+    .up { color: var(--success); font-weight: 700; }
+    .down { color: var(--error); font-weight: 700; }
+    .legend { display: flex; gap: 1.1rem; align-items: center; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.4rem; }
+    .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .foot-note { font-size: 0.74rem; color: var(--text-secondary); margin-top: 0.6rem; }
     .alert { border-left: 4px solid var(--warning); padding: 0.7rem 0.9rem; border-radius: 8px; background: var(--bg-secondary); margin-bottom: 0.6rem; }
     .alert.info { border-left-color: var(--accent); }
     .alert .t { font-weight: 700; font-size: 0.85rem; }
@@ -201,6 +212,57 @@
             <tbody id="bu-table"><tr><td colspan="7" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="card span12">
+        <h2>เปรียบเทียบยอดขายรายปี (YoY) <small id="year-cmp-label"></small></h2>
+        <div class="cmp-stats" id="year-stats"></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>ถึงวันเดียวกันของปี</span>
+          <span><i style="background:var(--accent);opacity:0.28"></i>ทั้งปี</span>
+        </div>
+        <div id="year-chart"><div class="skeleton-note">กำลังโหลด…</div></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>ปี</th>
+              <th class="num">Invoice (฿)</th>
+              <th class="num">CN (฿)</th>
+              <th class="num">สุทธิทั้งปี (฿)</th>
+              <th class="num">จำนวนใบ</th>
+              <th class="num" id="ytd-col-head">สุทธิถึงวันเดียวกัน (฿)</th>
+              <th class="num">เทียบปีก่อน</th>
+            </tr></thead>
+            <tbody id="year-table"><tr><td colspan="7" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="foot-note" id="year-note"></div>
+      </div>
+
+      <div class="card span12">
+        <h2>เปรียบเทียบเดือนต่อเดือน (MoM / YoY) <small id="month-cmp-label"></small></h2>
+        <div class="cmp-stats" id="month-stats"></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>เดือนนี้ (12 เดือนล่าสุด)</span>
+          <span><i style="background:var(--accent);opacity:0.28"></i>เดือนเดียวกันปีก่อน</span>
+          <span>ตัวเลขบนแท่ง = % เทียบปีก่อน</span>
+        </div>
+        <div id="month-chart"><div class="skeleton-note">กำลังโหลด…</div></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>เดือน</th>
+              <th class="num">สุทธิ (฿)</th>
+              <th class="num">จำนวนใบ</th>
+              <th class="num">เดือนก่อน (฿)</th>
+              <th class="num">MoM</th>
+              <th class="num">ปีก่อน (฿)</th>
+              <th class="num">YoY</th>
+            </tr></thead>
+            <tbody id="month-table"><tr><td colspan="7" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="foot-note" id="month-note"></div>
       </div>
 
       <div class="card span8">
@@ -313,6 +375,7 @@
     function loadDashboard(manual) {
       var dash = document.getElementById('dashboard');
       if (manual) dash.classList.add('loading');
+      loadCompare();
       fetch('api/odoo/dashboard?bu=' + encodeURIComponent(currentBU) + '&period=' + currentPeriod)
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -416,6 +479,196 @@
         'อัปเดตล่าสุด ' + t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
+    // ---- เปรียบเทียบยอดขาย: รายปี (YoY) และเดือนต่อเดือน (MoM) ----
+    var TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    function monthLabel(ym) {
+      return TH_MONTHS[+ym.slice(5, 7) - 1] + ' ' + ym.slice(2, 4);
+    }
+    function dayLabel(iso) { // '2026-09-02' -> '2 ก.ย.'
+      return (+iso.slice(8, 10)) + ' ' + TH_MONTHS[+iso.slice(5, 7) - 1];
+    }
+    function growth(cur, prev) {
+      if (prev === null || prev === undefined || prev <= 0) return { txt: '—', cls: '', pct: null };
+      var p = (cur - prev) / prev * 100;
+      // ฐานเทียบเล็กมาก (เอกสารตกค้างก่อน go-live) จะได้ % มหาศาลจนอ่านไม่รู้เรื่อง — ตัดที่ 900%
+      var txt = p > 900 ? '>+900%' : (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
+      return { txt: txt, cls: p >= 0 ? 'up' : 'down', pct: p };
+    }
+    function growthCell(cur, prev) {
+      var g = growth(cur, prev);
+      return '<span class="' + g.cls + '">' + g.txt + '</span>';
+    }
+    function statCard(label, value, delta, hi) {
+      return '<div class="cmp-stat' + (hi ? ' hi' : '') + '">' +
+        '<div class="l">' + esc(label) + '</div>' +
+        '<div class="v">' + value + '</div>' +
+        '<div class="d">' + (delta || '&nbsp;') + '</div></div>';
+    }
+
+    function loadCompare() {
+      fetch('api/odoo/sales-compare?bu=' + encodeURIComponent(currentBU))
+        .then(function (r) { return r.json(); })
+        .then(function (res) { if (res.success) renderCompare(res.data); })
+        .catch(function () {});
+    }
+
+    function renderCompare(d) {
+      var buTxt = d.bu === 'all' ? '· ทุก BU' : '· ' + d.bu;
+      var asOf = dayLabel(d.asOf);
+      document.getElementById('year-cmp-label').textContent = buTxt + ' · เทียบถึง ' + asOf + ' ของแต่ละปี';
+      document.getElementById('month-cmp-label').textContent = buTxt;
+      document.getElementById('ytd-col-head').textContent = 'สุทธิถึง ' + asOf + ' (฿)';
+
+      // ===== รายปี =====
+      var ys = d.yearly;
+      var curY = ys[ys.length - 1] || null;
+      var prvY = ys[ys.length - 2] || null;
+      if (curY) {
+        var gy = growth(curY.ytdNet, prvY ? prvY.ytdNet : null);
+        document.getElementById('year-stats').innerHTML =
+          statCard('ปี ' + curY.year + ' ถึง ' + asOf, baht(curY.ytdNet),
+            curY.ytdDocs.toLocaleString() + ' ใบ', true) +
+          statCard(prvY ? 'ปี ' + prvY.year + ' ช่วงเดียวกัน' : 'ปีก่อน', prvY ? baht(prvY.ytdNet) : '—',
+            prvY ? prvY.ytdDocs.toLocaleString() + ' ใบ' : '') +
+          statCard('เติบโตเทียบปีก่อน (YoY)', '<span class="' + gy.cls + '">' + gy.txt + '</span>',
+            prvY ? (curY.ytdNet - prvY.ytdNet >= 0 ? '+' : '') + baht(curY.ytdNet - prvY.ytdNet) : '') +
+          statCard('ปี ' + curY.year + ' สะสมทั้งปี', baht(curY.net), curY.docs.toLocaleString() + ' ใบ');
+      }
+
+      // กราฟรายปี — ตัดปีที่แทบไม่มียอด (เอกสารตกค้างก่อน go-live) ออกให้อ่านง่าย
+      var maxYear = Math.max.apply(null, ys.map(function (r) { return r.net; }).concat([1]));
+      var chartYears = ys.filter(function (r) { return r.net >= maxYear * 0.01; });
+      document.getElementById('year-chart').innerHTML = groupedBarsSVG(chartYears.map(function (r) {
+        return {
+          label: String(r.year),
+          a: r.ytdNet, b: r.net,
+          titleA: 'ปี ' + r.year + ' ถึง ' + asOf + '\n฿' + num(r.ytdNet) + ' (' + r.ytdDocs.toLocaleString() + ' ใบ)',
+          titleB: 'ปี ' + r.year + ' ทั้งปี\n฿' + num(r.net) + ' (' + r.docs.toLocaleString() + ' ใบ)'
+        };
+      }), { aria: 'กราฟเปรียบเทียบยอดขายรายปี' });
+
+      var hasPartial = false;
+      document.getElementById('year-table').innerHTML = ys.map(function (r, i) {
+        var prev = ys[i - 1];
+        var partial = r.months < 12;
+        if (partial) hasPartial = true;
+        return '<tr' + (curY && r.year === curY.year ? ' class="selected"' : '') + '>' +
+          '<td><strong>' + r.year + '</strong>' + (partial ? ' *' : '') + '</td>' +
+          '<td class="num">' + num(r.invoice) + '</td>' +
+          '<td class="num cn-col">' + (r.cn > 0 ? '-' + num(r.cn) : '0') + '</td>' +
+          '<td class="num"><strong>' + num(r.net) + '</strong></td>' +
+          '<td class="num">' + r.docs.toLocaleString() + '</td>' +
+          '<td class="num">' + num(r.ytdNet) + '</td>' +
+          '<td class="num">' + (prev ? growthCell(r.ytdNet, prev.ytdNet) : '—') + '</td></tr>';
+      }).join('');
+      document.getElementById('year-note').innerHTML =
+        (hasPartial ? '* ปีที่ข้อมูลไม่ครบ 12 เดือน · ' : '') +
+        'คอลัมน์ "เทียบปีก่อน" ใช้ยอดถึงวันเดียวกัน (1 ม.ค.–' + esc(asOf) + ') ของทั้งสองปี จึงเทียบกันได้ตรง ๆ · ' +
+        'ปีก่อนหน้า go-live Odoo (ก.พ. 2025) มีแต่เอกสารตกค้างจำนวนน้อย ใช้อ้างอิงแนวโน้มไม่ได้';
+
+      // ===== รายเดือน =====
+      var ms = d.monthly;
+      var mt = d.mtd;
+      var lastIdx = ms.length - 1;
+      var gm = growth(mt.current.net, mt.prevMonth.net);
+      var gl = growth(mt.current.net, mt.lastYear.net);
+      var prevFull = ms[lastIdx - 1];
+      document.getElementById('month-stats').innerHTML =
+        statCard(monthLabel(mt.current.month) + ' (1–' + asOf + ')', baht(mt.current.net),
+          mt.current.docs.toLocaleString() + ' ใบ', true) +
+        statCard(monthLabel(mt.prevMonth.month) + ' ช่วงวันเดียวกัน', baht(mt.prevMonth.net),
+          'MoM <span class="' + gm.cls + '">' + gm.txt + '</span>') +
+        statCard(monthLabel(mt.lastYear.month) + ' ช่วงวันเดียวกัน', baht(mt.lastYear.net),
+          'YoY <span class="' + gl.cls + '">' + gl.txt + '</span>') +
+        statCard(prevFull ? monthLabel(prevFull.month) + ' เต็มเดือน' : 'เดือนก่อน', prevFull ? baht(prevFull.net) : '—',
+          prevFull ? prevFull.docs.toLocaleString() + ' ใบ' : '');
+
+      document.getElementById('month-chart').innerHTML = groupedBarsSVG(ms.map(function (r, i) {
+        var isCur = i === lastIdx;
+        var a = isCur ? mt.current.net : r.net;
+        var b = isCur ? mt.lastYear.net : r.lastYearNet;
+        var scope = isCur ? ' (1–' + asOf + ')' : '';
+        return {
+          label: monthLabel(r.month) + (isCur ? '*' : ''),
+          a: a, b: b,
+          pct: growth(a, b),
+          titleA: monthLabel(r.month) + scope + '\n฿' + num(a),
+          titleB: (b === null || b === undefined ? 'ปีก่อน: ไม่มีข้อมูล' : monthLabel(shiftYM(r.month, -12)) + scope + '\n฿' + num(b))
+        };
+      }), { aria: 'กราฟเปรียบเทียบยอดขายรายเดือนกับปีก่อน', showPct: true });
+
+      var rowsHtml = [];
+      for (var i = ms.length - 1; i >= 0; i--) {
+        var r = ms[i];
+        var isCur = i === lastIdx;
+        var net = isCur ? mt.current.net : r.net;
+        var pv = isCur ? mt.prevMonth.net : r.prevNet;
+        var ly = isCur ? mt.lastYear.net : r.lastYearNet;
+        rowsHtml.push('<tr' + (isCur ? ' class="selected"' : '') + '>' +
+          '<td><strong>' + monthLabel(r.month) + '</strong>' + (isCur ? ' <span class="badge">(1–' + esc(asOf) + ')</span>' : '') + '</td>' +
+          '<td class="num"><strong>' + num(net) + '</strong></td>' +
+          '<td class="num">' + (isCur ? mt.current.docs : r.docs).toLocaleString() + '</td>' +
+          '<td class="num">' + (pv === null || pv === undefined ? '—' : num(pv)) + '</td>' +
+          '<td class="num">' + growthCell(net, pv) + '</td>' +
+          '<td class="num">' + (ly === null || ly === undefined ? '—' : num(ly)) + '</td>' +
+          '<td class="num">' + growthCell(net, ly) + '</td></tr>');
+      }
+      document.getElementById('month-table').innerHTML = rowsHtml.join('');
+      document.getElementById('month-note').textContent =
+        'เดือนปัจจุบันยังไม่จบ จึงเทียบแบบช่วงวันเดียวกัน (1–' + asOf + ') ทั้งกับเดือนก่อนและปีก่อน ' +
+        'ส่วนเดือนที่จบแล้วเทียบยอดเต็มเดือน · MoM = เทียบเดือนก่อนหน้า, YoY = เทียบเดือนเดียวกันปีก่อน';
+    }
+
+    // 'YYYY-MM' + n เดือน
+    function shiftYM(ym, n) {
+      var total = (+ym.slice(0, 4)) * 12 + (+ym.slice(5, 7) - 1) + n;
+      var m = (total % 12) + 1;
+      return Math.floor(total / 12) + '-' + (m < 10 ? '0' + m : m);
+    }
+
+    // กราฟแท่งคู่: a = ชุดหลัก (ทึบ), b = ชุดเทียบ (จาง)
+    function groupedBarsSVG(items, opts) {
+      opts = opts || {};
+      if (!items || items.length === 0) return '<div class="skeleton-note">ยังไม่มีข้อมูลในช่วงนี้</div>';
+      var W = 900, H = 270, padL = 62, padR = 12, padT = 22, padB = 34;
+      var cw = W - padL - padR, ch = H - padT - padB;
+      var max = 1;
+      items.forEach(function (it) { max = Math.max(max, it.a || 0, it.b || 0); });
+      max = max * 1.15;
+      var slot = cw / items.length;
+      var bw = Math.max(6, Math.min(44, slot * 0.3));
+
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto" role="img" aria-label="' + esc(opts.aria || '') + '">';
+      for (var g = 0; g <= 4; g++) {
+        var gy = padT + ch - (g / 4) * ch;
+        svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="currentColor" stroke-opacity="0.08"/>';
+        svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" font-size="10" fill="currentColor" opacity="0.55" text-anchor="end">' + axisNum(max * g / 4, max) + '</text>';
+      }
+      items.forEach(function (it, i) {
+        var cx = padL + slot * i + slot / 2;
+        var bars = [
+          { v: it.b, x: cx - bw - 1, op: 0.28, title: it.titleB },
+          { v: it.a, x: cx + 1, op: 1, title: it.titleA }
+        ];
+        bars.forEach(function (b) {
+          var v = Math.max(0, b.v || 0);
+          var h = Math.max(v > 0 ? 2 : 0, (v / max) * ch);
+          if (h === 0) return;
+          svg += '<rect x="' + b.x + '" y="' + (padT + ch - h) + '" width="' + bw + '" height="' + h +
+            '" rx="2" fill="var(--accent)" opacity="' + b.op + '"><title>' + esc(b.title || '') + '</title></rect>';
+        });
+        if (opts.showPct && it.pct && it.pct.pct !== null) {
+          var topH = Math.max(0, (Math.max(it.a || 0, it.b || 0) / max) * ch);
+          var col = it.pct.pct >= 0 ? 'var(--success)' : 'var(--error)';
+          svg += '<text x="' + cx + '" y="' + (padT + ch - topH - 6) + '" font-size="9.5" fill="' + col +
+            '" text-anchor="middle" font-weight="700">' + it.pct.txt + '</text>';
+        }
+        svg += '<text x="' + cx + '" y="' + (H - 12) + '" font-size="10" fill="currentColor" opacity="0.6" text-anchor="middle">' + esc(it.label) + '</text>';
+      });
+      svg += '</svg>';
+      return svg;
+    }
+
     function trendSVG(rows) {
       if (!rows || rows.length === 0) return '<div class="skeleton-note">ยังไม่มีข้อมูลในช่วงนี้</div>';
       var W = 720, H = 240, padL = 66, padR = 14, padT = 14, padB = 34;
@@ -450,7 +703,15 @@
       svg += '</svg>';
       return svg;
     }
+    // แกน Y ใช้หน่วยเดียวกันทั้งแกน (อิงค่าสูงสุด) จะได้ไม่ปน B กับ M
+    function axisNum(v, max) {
+      if (max >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+      if (max >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+      if (max >= 1e3) return Math.round(v / 1e3) + 'K';
+      return Math.round(v);
+    }
     function compactNum(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
       if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
       if (n >= 1e3) return Math.round(n / 1e3) + 'K';
       return Math.round(n);

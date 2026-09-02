@@ -40,13 +40,14 @@ app.get('/health', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     name: 'Odoo Dashboard API',
-    version: '2.0.0',
+    version: '2.1.0',
     endpoints: {
       'GET /': 'Executive dashboard UI',
       'GET /APIGuide': 'API guideline สำหรับทีมภายนอก (หน้าเว็บ + ลิงก์ PDF/OpenAPI/Postman)',
       'GET /api/odoo/dashboard?teamId=all|N': 'Dashboard data (real-time, 60s cache)',
       'GET /insights': 'หน้า Data Insight (ลูกค้า/สินค้า/ช่องทาง/campaign)',
       'GET /api/odoo/insights': 'ข้อมูล insight ทั้งชุด (cache 5 นาที)',
+      'GET /api/odoo/sales-compare?bu=all|<BU>&years=5': 'เปรียบเทียบยอดขายรายปี (YoY) และเดือนต่อเดือน (MoM)',
       'GET /api/odoo/business-units': 'Sales teams with volume this year',
       'GET /api/odoo/tables': 'List database tables',
       'GET /api/odoo/schema/:tableName': 'Table schema',
