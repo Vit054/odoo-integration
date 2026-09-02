@@ -240,24 +240,24 @@
       </div>
 
       <div class="card span12">
-        <h2>เปรียบเทียบเดือนต่อเดือน (MoM / YoY) <small id="month-cmp-label"></small></h2>
+        <h2>เปรียบเทียบรายเดือน: เดือนเดียวกัน ปีนี้ vs ปีที่แล้ว <small id="month-cmp-label"></small></h2>
         <div class="cmp-stats" id="month-stats"></div>
         <div class="legend">
-          <span><i style="background:var(--accent)"></i>เดือนนี้ (12 เดือนล่าสุด)</span>
-          <span><i style="background:var(--accent);opacity:0.28"></i>เดือนเดียวกันปีก่อน</span>
-          <span>ตัวเลขบนแท่ง = % เทียบปีก่อน</span>
+          <span><i style="background:var(--accent)"></i><span id="lg-cur">ปีนี้</span></span>
+          <span><i style="background:var(--accent);opacity:0.28"></i><span id="lg-prev">ปีที่แล้ว</span></span>
+          <span>ตัวเลขบนแท่ง = % เทียบเดือนเดียวกันปีที่แล้ว</span>
         </div>
         <div id="month-chart"><div class="skeleton-note">กำลังโหลด…</div></div>
         <div class="table-scroll">
           <table>
             <thead><tr>
               <th>เดือน</th>
-              <th class="num">สุทธิ (฿)</th>
+              <th class="num" id="th-prev-year">ปีที่แล้ว (฿)</th>
+              <th class="num" id="th-cur-year">ปีนี้ (฿)</th>
+              <th class="num">ผลต่าง (฿)</th>
+              <th class="num">เทียบปีที่แล้ว</th>
               <th class="num">จำนวนใบ</th>
-              <th class="num">เดือนก่อน (฿)</th>
-              <th class="num">MoM</th>
-              <th class="num">ปีก่อน (฿)</th>
-              <th class="num">YoY</th>
+              <th class="num">เทียบเดือนก่อนหน้า</th>
             </tr></thead>
             <tbody id="month-table"><tr><td colspan="7" class="skeleton-note">กำลังโหลด…</td></tr></tbody>
           </table>
@@ -566,57 +566,83 @@
         'คอลัมน์ "เทียบปีก่อน" ใช้ยอดถึงวันเดียวกัน (1 ม.ค.–' + esc(asOf) + ') ของทั้งสองปี จึงเทียบกันได้ตรง ๆ · ' +
         'ปีก่อนหน้า go-live Odoo (ก.พ. 2025) มีแต่เอกสารตกค้างจำนวนน้อย ใช้อ้างอิงแนวโน้มไม่ได้';
 
-      // ===== รายเดือน =====
-      var ms = d.monthly;
+      // ===== รายเดือน: เดือนเดียวกัน ปีนี้ vs ปีที่แล้ว =====
+      var ms = d.monthly;                       // 12 เดือนล่าสุด (ตัวสุดท้าย = เดือนปัจจุบัน)
       var mt = d.mtd;
-      var lastIdx = ms.length - 1;
-      var gm = growth(mt.current.net, mt.prevMonth.net);
+      var curMonth = mt.current.month;
+      var curYear = d.asOf.slice(0, 4);
+      var prevYear = String(+curYear - 1);
+      // ปกติเรียงตามปฏิทินปีนี้ (ม.ค. → เดือนปัจจุบัน); ต้นปีที่ยังมีไม่กี่เดือนถอยไปใช้ 12 เดือนล่าสุดแทน
+      var rows = ms.filter(function (r) { return r.month.slice(0, 4) === curYear; });
+      var calendarMode = rows.length >= 3;
+      if (!calendarMode) rows = ms;
+
+      document.getElementById('lg-cur').textContent = calendarMode ? 'ปี ' + curYear : 'เดือนนี้ (12 เดือนล่าสุด)';
+      document.getElementById('lg-prev').textContent = calendarMode ? 'ปี ' + prevYear : 'เดือนเดียวกันปีก่อน';
+      document.getElementById('th-cur-year').textContent = (calendarMode ? 'ปี ' + curYear : 'ปีนี้') + ' (฿)';
+      document.getElementById('th-prev-year').textContent = (calendarMode ? 'ปี ' + prevYear : 'ปีที่แล้ว') + ' (฿)';
+
+      // เดือนปัจจุบันยังไม่จบ → ใช้ยอดช่วงวันเดียวกันทั้งสองฝั่ง
+      function curOf(r) { return r.month === curMonth ? mt.current.net : r.net; }
+      function lyOf(r) { return r.month === curMonth ? mt.lastYear.net : r.lastYearNet; }
+      function docsOf(r) { return r.month === curMonth ? mt.current.docs : r.docs; }
+
+      // เดือนที่โต/หดมากสุดเทียบปีที่แล้ว (เฉพาะเดือนที่จบแล้ว และฐานปีก่อนใช้เทียบได้จริง)
+      var best = null, worst = null;
+      rows.forEach(function (r) {
+        if (r.month === curMonth) return;
+        var g = growth(r.net, r.lastYearNet);
+        if (g.pct === null || g.pct > 900) return;
+        if (!best || g.pct > growth(best.net, best.lastYearNet).pct) best = r;
+        if (!worst || g.pct < growth(worst.net, worst.lastYearNet).pct) worst = r;
+      });
+      function extremeCard(label, r) {
+        if (!r) return statCard(label, '—', '');
+        var g = growth(r.net, r.lastYearNet);
+        return statCard(label, monthLabel(r.month) + ' <span class="' + g.cls + '">' + g.txt + '</span>',
+          baht(r.net) + ' จาก ' + baht(r.lastYearNet));
+      }
+
       var gl = growth(mt.current.net, mt.lastYear.net);
-      var prevFull = ms[lastIdx - 1];
       document.getElementById('month-stats').innerHTML =
         statCard(monthLabel(mt.current.month) + ' (1–' + asOf + ')', baht(mt.current.net),
           mt.current.docs.toLocaleString() + ' ใบ', true) +
-        statCard(monthLabel(mt.prevMonth.month) + ' ช่วงวันเดียวกัน', baht(mt.prevMonth.net),
-          'MoM <span class="' + gm.cls + '">' + gm.txt + '</span>') +
         statCard(monthLabel(mt.lastYear.month) + ' ช่วงวันเดียวกัน', baht(mt.lastYear.net),
-          'YoY <span class="' + gl.cls + '">' + gl.txt + '</span>') +
-        statCard(prevFull ? monthLabel(prevFull.month) + ' เต็มเดือน' : 'เดือนก่อน', prevFull ? baht(prevFull.net) : '—',
-          prevFull ? prevFull.docs.toLocaleString() + ' ใบ' : '');
+          'เทียบปีที่แล้ว <span class="' + gl.cls + '">' + gl.txt + '</span>') +
+        extremeCard('เดือนที่โตสุด (เทียบปีที่แล้ว)', best) +
+        extremeCard('เดือนที่หดสุด (เทียบปีที่แล้ว)', worst);
 
-      document.getElementById('month-chart').innerHTML = groupedBarsSVG(ms.map(function (r, i) {
-        var isCur = i === lastIdx;
-        var a = isCur ? mt.current.net : r.net;
-        var b = isCur ? mt.lastYear.net : r.lastYearNet;
+      document.getElementById('month-chart').innerHTML = groupedBarsSVG(rows.map(function (r) {
+        var isCur = r.month === curMonth;
+        var a = curOf(r), b = lyOf(r);
         var scope = isCur ? ' (1–' + asOf + ')' : '';
         return {
           label: monthLabel(r.month) + (isCur ? '*' : ''),
           a: a, b: b,
           pct: growth(a, b),
           titleA: monthLabel(r.month) + scope + '\n฿' + num(a),
-          titleB: (b === null || b === undefined ? 'ปีก่อน: ไม่มีข้อมูล' : monthLabel(shiftYM(r.month, -12)) + scope + '\n฿' + num(b))
+          titleB: (b === null || b === undefined ? 'ปีที่แล้ว: ไม่มีข้อมูล' : monthLabel(shiftYM(r.month, -12)) + scope + '\n฿' + num(b))
         };
-      }), { aria: 'กราฟเปรียบเทียบยอดขายรายเดือนกับปีก่อน', showPct: true });
+      }), { aria: 'กราฟเปรียบเทียบยอดขายรายเดือน ปีนี้เทียบปีที่แล้ว', showPct: true });
 
-      var rowsHtml = [];
-      for (var i = ms.length - 1; i >= 0; i--) {
-        var r = ms[i];
-        var isCur = i === lastIdx;
-        var net = isCur ? mt.current.net : r.net;
-        var pv = isCur ? mt.prevMonth.net : r.prevNet;
-        var ly = isCur ? mt.lastYear.net : r.lastYearNet;
-        rowsHtml.push('<tr' + (isCur ? ' class="selected"' : '') + '>' +
+      document.getElementById('month-table').innerHTML = rows.map(function (r) {
+        var isCur = r.month === curMonth;
+        var net = curOf(r), ly = lyOf(r);
+        var pv = isCur ? mt.prevMonth.net : r.prevNet;   // เดือนก่อนหน้าในปีเดียวกัน
+        var diff = (ly === null || ly === undefined) ? null : net - ly;
+        return '<tr' + (isCur ? ' class="selected"' : '') + '>' +
           '<td><strong>' + monthLabel(r.month) + '</strong>' + (isCur ? ' <span class="badge">(1–' + esc(asOf) + ')</span>' : '') + '</td>' +
-          '<td class="num"><strong>' + num(net) + '</strong></td>' +
-          '<td class="num">' + (isCur ? mt.current.docs : r.docs).toLocaleString() + '</td>' +
-          '<td class="num">' + (pv === null || pv === undefined ? '—' : num(pv)) + '</td>' +
-          '<td class="num">' + growthCell(net, pv) + '</td>' +
           '<td class="num">' + (ly === null || ly === undefined ? '—' : num(ly)) + '</td>' +
-          '<td class="num">' + growthCell(net, ly) + '</td></tr>');
-      }
-      document.getElementById('month-table').innerHTML = rowsHtml.join('');
+          '<td class="num"><strong>' + num(net) + '</strong></td>' +
+          '<td class="num">' + (diff === null ? '—' : '<span class="' + (diff >= 0 ? 'up' : 'down') + '">' + (diff >= 0 ? '+' : '-') + num(Math.abs(diff)) + '</span>') + '</td>' +
+          '<td class="num">' + growthCell(net, ly) + '</td>' +
+          '<td class="num">' + docsOf(r).toLocaleString() + '</td>' +
+          '<td class="num">' + growthCell(net, pv) + '</td></tr>';
+      }).join('');
       document.getElementById('month-note').textContent =
-        'เดือนปัจจุบันยังไม่จบ จึงเทียบแบบช่วงวันเดียวกัน (1–' + asOf + ') ทั้งกับเดือนก่อนและปีก่อน ' +
-        'ส่วนเดือนที่จบแล้วเทียบยอดเต็มเดือน · MoM = เทียบเดือนก่อนหน้า, YoY = เทียบเดือนเดียวกันปีก่อน';
+        'ทุกแถวคือเดือนเดียวกันของสองปีวางเทียบกัน (เช่น ' + monthLabel(shiftYM(curMonth, -12)) + ' vs ' + monthLabel(curMonth) + ') · ' +
+        'เดือน ' + monthLabel(curMonth) + ' ยังไม่จบ จึงตัดยอดที่ 1–' + asOf + ' ทั้งสองฝั่งให้เทียบกันได้ตรง · ' +
+        'คอลัมน์สุดท้าย "เทียบเดือนก่อนหน้า" คือเทียบกับเดือนที่แล้วในปีเดียวกัน ไว้ดูจังหวะขึ้น-ลงระหว่างเดือน';
     }
 
     // 'YYYY-MM' + n เดือน
