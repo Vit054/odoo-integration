@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>จัดการ Token — CFF Odoo API</title>
+  <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f5f7f9;
+      --bg-tertiary: #eceff3;
+      --text-primary: #10202b;
+      --text-secondary: #51626f;
+      --border: #dfe6ec;
+      --accent: #0d9488;
+      --accent-light: #d5f3ef;
+      --warning: #d97706;
+      --error: #dc2626;
+      --success: #16a34a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Leelawadee UI", Tahoma, sans-serif;
+    }
+    :root[data-theme="dark"] {
+      --bg-primary: #101c26; --bg-secondary: #0a141c; --bg-tertiary: #1c2b38;
+      --text-primary: #ecf2f6; --text-secondary: #9fb2c0; --border: #24374a; --accent-light: #123f3a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg-primary: #101c26; --bg-secondary: #0a141c; --bg-tertiary: #1c2b38;
+        --text-primary: #ecf2f6; --text-secondary: #9fb2c0; --border: #24374a; --accent-light: #123f3a;
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg-secondary); color: var(--text-primary); line-height: 1.55; }
+
+    .header {
+      background: var(--bg-primary); border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 700; }
+    .header .sub { font-size: 0.8rem; color: var(--text-secondary); }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1.5rem 4rem; }
+    .card { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.8rem; }
+
+    button, .btn {
+      background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary);
+      padding: 0.4rem 0.85rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    button.danger { color: var(--error); }
+    button.icon { padding: 0.3rem 0.5rem; font-size: 0.9rem; line-height: 1; }
+    input[type=text], input[type=password] {
+      background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary);
+      padding: 0.45rem 0.7rem; border-radius: 8px; font-size: 0.9rem; font-family: inherit; width: 100%;
+    }
+    input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.25rem; }
+
+    .row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+    .row > div { flex: 1 1 180px; }
+    .row > .fixed { flex: 0 0 auto; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 0.5rem 0.6rem; color: var(--text-secondary); font-size: 0.72rem;
+         text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); white-space: nowrap; }
+    td { padding: 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.off td { opacity: 0.55; }
+    .table-scroll { overflow-x: auto; }
+
+    code.tok { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.8rem;
+               background: var(--bg-tertiary); padding: 0.15rem 0.45rem; border-radius: 6px; white-space: nowrap; }
+    .pill { display: inline-block; padding: 0.12rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .pill.on { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+    .pill.off { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+    .actions { display: flex; gap: 0.3rem; justify-content: flex-end; }
+
+    .note { font-size: 0.78rem; color: var(--text-secondary); }
+    .msg { padding: 0.7rem 0.9rem; border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.85rem; display: none; }
+    .msg.err { display: block; background: color-mix(in srgb, var(--error) 12%, transparent); border: 1px solid var(--error); color: var(--error); }
+    .msg.ok { display: block; background: var(--accent-light); border: 1px solid var(--accent); color: var(--text-primary); }
+    .newtok { background: var(--accent-light); border: 1px solid var(--accent); border-radius: 10px; padding: 0.9rem 1rem; margin-bottom: 0.9rem; display: none; }
+    .newtok code { display: block; word-break: break-all; white-space: normal; margin: 0.4rem 0; font-size: 0.9rem; }
+    .hide { display: none; }
+    @media (max-width: 700px) { .actions { justify-content: flex-start; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>จัดการ Token — CFF Odoo API</h1>
+      <div class="sub">token สำหรับทีมภายนอกที่เรียก <code>https://flowtica.link/odoo-api</code> · แก้แล้วมีผลทันที ไม่ต้อง restart</div>
+    </div>
+    <button onclick="toggleTheme()">◐ ธีม</button>
+  </header>
+
+  <main class="container">
+    <div id="msg" class="msg"></div>
+
+    <div class="card" id="auth-card">
+      <h2>เข้าสู่ระบบผู้ดูแล</h2>
+      <div class="row">
+        <div>
+          <label for="admin">Admin Token</label>
+          <input type="password" id="admin" placeholder="วาง ADMIN_TOKEN ของเซิร์ฟเวอร์" autocomplete="current-password">
+        </div>
+        <div class="fixed"><button class="primary" onclick="load()">เปิดรายการ</button></div>
+        <div class="fixed"><label>&nbsp;</label><label style="font-weight:500"><input type="checkbox" id="remember" checked style="width:auto"> จำไว้ในเครื่องนี้</label></div>
+      </div>
+    </div>
+
+    <div id="panel" class="hide">
+      <div class="card">
+        <h2>สร้าง token ใหม่</h2>
+        <div id="newtok" class="newtok"></div>
+        <div class="row">
+          <div>
+            <label for="new-label">ชื่อทีม / ผู้ใช้งาน</label>
+            <input type="text" id="new-label" placeholder="เช่น ทีม Logistics พาร์ทเนอร์ A" maxlength="60">
+          </div>
+          <div>
+            <label for="new-note">หมายเหตุ (ใครติดต่อ / ใช้ทำอะไร)</label>
+            <input type="text" id="new-note" placeholder="เช่น ดึงยอดขายรายวันเข้าระบบ WMS · ติดต่อคุณเอ 08x-xxx" maxlength="200">
+          </div>
+          <div class="fixed"><button class="primary" onclick="createToken()">+ สร้าง token</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>token ทั้งหมด <span id="count" class="note"></span></h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>ทีม / ผู้ใช้งาน</th>
+              <th>Token</th>
+              <th>สถานะ</th>
+              <th>สร้างเมื่อ</th>
+              <th>ใช้ล่าสุด</th>
+              <th class="num">เรียกไปแล้ว</th>
+              <th style="text-align:right">จัดการ</th>
+            </tr></thead>
+            <tbody id="rows"><tr><td colspan="7" class="note">กำลังโหลด…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-top:0.8rem">
+          🔒 <b>ปิดใช้</b> = token ใช้ไม่ได้ทันทีแต่ยังเก็บประวัติไว้ · <b>ออก token ใหม่</b> = ของเดิมใช้ไม่ได้ทันที ต้องส่งค่าใหม่ให้ทีมนั้น ·
+          <b>ลบ</b> = หายถาวร · ทุกการเรียก API ถูกบันทึกใน log ของเซิร์ฟเวอร์ (ชื่อทีม + IP + endpoint)
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // เรียก API ที่ path เดียวกับหน้านี้ (รองรับทั้ง /tokens และ /odoo-api/tokens)
+    var API = location.pathname.replace(/\/tokens\/?$/, '') + '/api/odoo/tokens';
+    var DATA = [];
+    var shown = {};   // id -> เผย token อยู่หรือไม่
+
+    function toggleTheme() {
+      var root = document.documentElement;
+      var eff = root.getAttribute('data-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      var next = eff === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('cff-theme', next); } catch (e) {}
+    }
+    try {
+      var savedTheme = localStorage.getItem('cff-theme');
+      if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+      var savedTok = localStorage.getItem('cff-admin-token');
+      if (savedTok) document.getElementById('admin').value = savedTok;
+    } catch (e) {}
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function msg(text, ok) {
+      var el = document.getElementById('msg');
+      el.className = 'msg ' + (ok ? 'ok' : 'err');
+      el.textContent = text;
+      if (ok) setTimeout(function () { el.className = 'msg'; }, 4000);
+    }
+    function hdrs() {
+      return {
+        'Authorization': 'Bearer ' + document.getElementById('admin').value.trim(),
+        'Content-Type': 'application/json',
+      };
+    }
+    function when(iso) {
+      if (!iso) return '—';
+      var d = new Date(iso);
+      return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' }) +
+        ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+    function mask(t) { return t.slice(0, 6) + '…' + t.slice(-4); }
+
+    function call(method, path, body) {
+      return fetch(API + (path || ''), {
+        method: method,
+        headers: hdrs(),
+        body: body ? JSON.stringify(body) : undefined,
+      }).then(function (r) {
+        if (r.status === 401) throw new Error('Admin token ไม่ถูกต้อง');
+        if (r.status === 503) throw new Error('เซิร์ฟเวอร์ยังไม่ได้ตั้ง ADMIN_TOKEN');
+        if (r.status === 429) throw new Error('เรียกถี่เกินไป รอสักครู่แล้วลองใหม่');
+        return r.json().then(function (j) {
+          if (!j.success) throw new Error(j.error || ('HTTP ' + r.status));
+          return j;
+        });
+      });
+    }
+
+    function load() {
+      var tok = document.getElementById('admin').value.trim();
+      if (!tok) { msg('กรุณาใส่ Admin Token', false); return; }
+      call('GET').then(function (j) {
+        DATA = j.data;
+        try {
+          if (document.getElementById('remember').checked) localStorage.setItem('cff-admin-token', tok);
+          else localStorage.removeItem('cff-admin-token');
+        } catch (e) {}
+        document.getElementById('panel').classList.remove('hide');
+        document.getElementById('msg').className = 'msg';
+        render();
+      }).catch(function (e) { msg(e.message, false); });
+    }
+
+    function render() {
+      var on = DATA.filter(function (t) { return t.enabled; }).length;
+      document.getElementById('count').textContent =
+        '· ' + DATA.length + ' รายการ (เปิดใช้ ' + on + ' · ปิด ' + (DATA.length - on) + ')';
+
+      if (DATA.length === 0) {
+        document.getElementById('rows').innerHTML =
+          '<tr><td colspan="7" class="note">ยังไม่มี token — สร้างใบแรกได้ที่ช่องด้านบน</td></tr>';
+        return;
+      }
+      document.getElementById('rows').innerHTML = DATA.map(function (t) {
+        var tokCell = shown[t.id]
+          ? '<code class="tok">' + esc(t.token) + '</code>'
+          : '<code class="tok">' + esc(mask(t.token)) + '</code>';
+        return '<tr class="' + (t.enabled ? '' : 'off') + '">' +
+          '<td><b>' + esc(t.label) + '</b>' +
+            (t.note ? '<br><span class="note">' + esc(t.note) + '</span>' : '') + '</td>' +
+          '<td>' + tokCell +
+            ' <button class="icon" title="เผย/ซ่อน" onclick="reveal(\'' + t.id + '\')">👁</button>' +
+            ' <button class="icon" title="คัดลอก" onclick="copy(\'' + t.id + '\')">📋</button></td>' +
+          '<td><span class="pill ' + (t.enabled ? 'on' : 'off') + '">' + (t.enabled ? 'เปิดใช้' : 'ปิด') + '</span></td>' +
+          '<td class="note">' + when(t.createdAt) + '</td>' +
+          '<td class="note">' + when(t.lastUsedAt) + '</td>' +
+          '<td class="num">' + (t.useCount || 0).toLocaleString('th-TH') + '</td>' +
+          '<td><div class="actions">' +
+            '<button class="icon" title="แก้ไขชื่อ/หมายเหตุ" onclick="edit(\'' + t.id + '\')">✏️</button>' +
+            '<button class="icon" title="' + (t.enabled ? 'ปิดใช้ชั่วคราว' : 'เปิดใช้อีกครั้ง') + '" onclick="toggleEnabled(\'' + t.id + '\')">' +
+              (t.enabled ? '⏸' : '▶️') + '</button>' +
+            '<button class="icon" title="ออก token ใหม่" onclick="rotate(\'' + t.id + '\')">🔄</button>' +
+            '<button class="icon danger" title="ลบถาวร" onclick="remove(\'' + t.id + '\')">🗑</button>' +
+          '</div></td></tr>';
+      }).join('');
+    }
+
+    function byId(id) { return DATA.filter(function (t) { return t.id === id; })[0]; }
+
+    function reveal(id) { shown[id] = !shown[id]; render(); }
+
+    function copy(id) {
+      var t = byId(id);
+      if (!t) return;
+      navigator.clipboard.writeText(t.token).then(function () {
+        msg('คัดลอก token ของ "' + t.label + '" แล้ว', true);
+      }).catch(function () { msg('คัดลอกไม่สำเร็จ — กด 👁 แล้วคัดลอกเอง', false); });
+    }
+
+    function createToken() {
+      var label = document.getElementById('new-label').value.trim();
+      var note = document.getElementById('new-note').value.trim();
+      if (!label) { msg('ใส่ชื่อทีมก่อน', false); return; }
+      call('POST', '', { label: label, note: note }).then(function (j) {
+        document.getElementById('new-label').value = '';
+        document.getElementById('new-note').value = '';
+        var box = document.getElementById('newtok');
+        box.style.display = 'block';
+        box.innerHTML = '<b>สร้าง token ให้ "' + esc(j.data.label) + '" แล้ว — ส่งค่านี้ให้ทีมนั้น</b>' +
+          '<code>' + esc(j.data.token) + '</code>' +
+          '<button onclick="copyText(\'' + j.data.token + '\')">📋 คัดลอก</button> ' +
+          '<button onclick="document.getElementById(\'newtok\').style.display=\'none\'">ปิด</button>';
+        return call('GET');
+      }).then(function (j) { DATA = j.data; render(); })
+        .catch(function (e) { msg(e.message, false); });
+    }
+
+    function copyText(t) {
+      navigator.clipboard.writeText(t).then(function () { msg('คัดลอกแล้ว', true); });
+    }
+
+    function edit(id) {
+      var t = byId(id);
+      if (!t) return;
+      var label = prompt('ชื่อทีม / ผู้ใช้งาน', t.label);
+      if (label === null) return;
+      var note = prompt('หมายเหตุ', t.note || '');
+      if (note === null) return;
+      call('PUT', '/' + id, { label: label, note: note })
+        .then(function () { return call('GET'); })
+        .then(function (j) { DATA = j.data; render(); msg('บันทึกแล้ว', true); })
+        .catch(function (e) { msg(e.message, false); });
+    }
+
+    function toggleEnabled(id) {
+      var t = byId(id);
+      if (!t) return;
+      if (t.enabled && !confirm('ปิดใช้ token ของ "' + t.label + '" ?\nทีมนั้นจะเรียก API ไม่ได้ทันที')) return;
+      call('PUT', '/' + id, { enabled: !t.enabled })
+        .then(function () { return call('GET'); })
+        .then(function (j) { DATA = j.data; render(); msg(t.enabled ? 'ปิดใช้แล้ว' : 'เปิดใช้แล้ว', true); })
+        .catch(function (e) { msg(e.message, false); });
+    }
+
+    function rotate(id) {
+      var t = byId(id);
+      if (!t) return;
+      if (!confirm('ออก token ใหม่ให้ "' + t.label + '" ?\nค่าเดิมจะใช้ไม่ได้ทันที ต้องส่งค่าใหม่ให้ทีมนั้น')) return;
+      call('PUT', '/' + id, { rotate: true }).then(function (j) {
+        var box = document.getElementById('newtok');
+        box.style.display = 'block';
+        box.innerHTML = '<b>token ใหม่ของ "' + esc(j.data.label) + '" — ส่งค่านี้ให้ทีมนั้น</b>' +
+          '<code>' + esc(j.data.token) + '</code>' +
+          '<button onclick="copyText(\'' + j.data.token + '\')">📋 คัดลอก</button> ' +
+          '<button onclick="document.getElementById(\'newtok\').style.display=\'none\'">ปิด</button>';
+        return call('GET');
+      }).then(function (j) { DATA = j.data; render(); })
+        .catch(function (e) { msg(e.message, false); });
+    }
+
+    function remove(id) {
+      var t = byId(id);
+      if (!t) return;
+      if (!confirm('ลบ token ของ "' + t.label + '" ถาวร ?\nกู้คืนไม่ได้ ถ้าแค่อยากระงับชั่วคราวให้ใช้ปุ่ม ⏸ แทน')) return;
+      call('DELETE', '/' + id)
+        .then(function () { return call('GET'); })
+        .then(function (j) { DATA = j.data; render(); msg('ลบแล้ว', true); })
+        .catch(function (e) { msg(e.message, false); });
+    }
+
+    document.getElementById('admin').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') load();
+    });
+    // มี token จำไว้แล้วก็เปิดรายการให้เลย
+    if (document.getElementById('admin').value) load();
+  </script>
+</body>
+</html>

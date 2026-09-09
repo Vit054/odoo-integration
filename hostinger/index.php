@@ -83,8 +83,9 @@ if ($body !== null && $body !== '') {
     curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
 }
 
-$out  = curl_exec($ch);
-$code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$out   = curl_exec($ch);
+$code  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$ctype = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 $err  = curl_error($ch);
 curl_close($ch);
 
@@ -97,4 +98,5 @@ if ($out === false || $code === 0) {
 }
 
 http_response_code($code);
+header("Content-Type: " . ($ctype ?: "application/json; charset=utf-8"));
 echo $out;

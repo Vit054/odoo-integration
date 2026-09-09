@@ -2,11 +2,14 @@
 // บน intranet (192.168.101.104) ไม่ต้องเปิดโหมดนี้ พฤติกรรมเดิมทุกอย่าง
 //
 // ป้องกัน 4 ชั้น:
-//   1) เปิดเฉพาะ endpoint ชุดที่แจกทีมภายนอก (tables / schema / query / insert) — ที่เหลือ 404
-//   2) ทุก request ต้องมี Authorization: Bearer <token> (แจก token แยกรายทีม เพิกถอนรายทีมได้)
+//   1) เปิดเฉพาะ endpoint ชุดที่แจกทีมภายนอก (tables / schema / query / insert)
+//      + ชุดจัดการ token (/tokens) ที่ตรวจสิทธิ์ด้วย ADMIN_TOKEN ใน router — ที่เหลือ 404
+//   2) ทุก request ของทีมภายนอกต้องมี Authorization: Bearer <token> (ดูรายชื่อจาก tokens.json)
 //   3) ถ้าตั้ง PROXY_SECRET ไว้ ต้องมี header X-Proxy-Secret ตรงกัน (กันคนยิงข้าม proxy)
 //   4) จำกัดจำนวน request ต่อนาที ต่อ token+IP
 // ทุก request ถูก log ชื่อทีม/เมธอด/พาธ/สถานะ ไว้ใน journald (journalctl -u odoo-api)
+
+const tokenStore = require('./token-store');
 
 const ALLOWED_PATHS = [
   /^\/tables\/?$/,
@@ -15,28 +18,11 @@ const ALLOWED_PATHS = [
   /^\/insert\/[a-z0-9_]+\/?$/i,
 ];
 
-// API_TOKENS="ทีมA:token1,ทีมB:token2"  (ใส่แค่ token เฉย ๆ ก็ได้ ชื่อจะเป็น token-1, token-2)
-function parseTokens(raw) {
-  return String(raw || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((pair, i) => {
-      const idx = pair.lastIndexOf(':');
-      if (idx > 0) return { label: pair.slice(0, idx), token: pair.slice(idx + 1) };
-      return { label: `token-${i + 1}`, token: pair };
-    })
-    .filter((t) => t.token.length >= 16); // กัน token สั้นเกินไปจนเดาได้
-}
-
-// เทียบ token แบบไม่รั่วเวลา (timing-safe)
-const crypto = require('crypto');
-function sameToken(a, b) {
-  const x = Buffer.from(String(a));
-  const y = Buffer.from(String(b));
-  if (x.length !== y.length) return false;
-  return crypto.timingSafeEqual(x, y);
-}
+// ชุดจัดการ token — ตรวจ ADMIN_TOKEN ที่ router (requireToken) ไม่ใช่ token ของทีมภายนอก
+const ADMIN_PATHS = [
+  /^\/tokens\/?$/,
+  /^\/tokens\/[A-Za-z0-9_-]+\/?$/,
+];
 
 // นับ request แบบ sliding window ในหน่วยความจำ (ไม่พึ่ง dependency เพิ่ม)
 const hits = new Map();
@@ -57,15 +43,19 @@ setInterval(() => {
 }, 60000).unref();
 
 function createPublicGuard() {
-  const tokens = parseTokens(process.env.API_TOKENS);
   const proxySecret = process.env.PROXY_SECRET || '';
   const perMin = parseInt(process.env.RATE_LIMIT_PER_MIN, 10) || 60;
+  const adminPerMin = parseInt(process.env.ADMIN_RATE_LIMIT_PER_MIN, 10) || 30;
 
-  if (tokens.length === 0) {
-    throw new Error('PUBLIC_MODE=1 แต่ยังไม่ได้ตั้ง API_TOKENS — ไม่ยอมเปิดบริการโดยไม่มี token');
+  const n = tokenStore.list().length;
+  if (n === 0) {
+    console.warn('⚠ ยังไม่มี token ในระบบ — API ปิดรับทุก request จนกว่าจะสร้าง token ที่หน้า /tokens');
   }
-  console.log(`✓ โหมดสาธารณะ: ${tokens.length} token (${tokens.map((t) => t.label).join(', ')}), ` +
-    `จำกัด ${perMin} req/นาที, proxy secret ${proxySecret ? 'เปิด' : 'ปิด'}`);
+  if (!process.env.ADMIN_TOKEN) {
+    console.warn('⚠ ไม่ได้ตั้ง ADMIN_TOKEN — หน้าจัดการ token ใช้ไม่ได้ (และ Write API ปิดสนิท)');
+  }
+  console.log(`✓ โหมดสาธารณะ: ${n} token, จำกัด ${perMin} req/นาที (แอดมิน ${adminPerMin}), ` +
+    `proxy secret ${proxySecret ? 'เปิด' : 'ปิด'}`);
 
   return function publicGuard(req, res, next) {
     const started = Date.now();
@@ -74,7 +64,8 @@ function createPublicGuard() {
     const ip = req.headers['x-client-ip'] ||
       (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
 
-    if (!ALLOWED_PATHS.some((re) => re.test(req.path))) {
+    const isAdmin = ADMIN_PATHS.some((re) => re.test(req.path));
+    if (!isAdmin && !ALLOWED_PATHS.some((re) => re.test(req.path))) {
       return res.status(404).json({ success: false, error: 'ไม่มี endpoint นี้ในชุดสาธารณะ' });
     }
     if (proxySecret && req.headers['x-proxy-secret'] !== proxySecret) {
@@ -82,20 +73,34 @@ function createPublicGuard() {
       return res.status(403).json({ success: false, error: 'ต้องเรียกผ่าน https://flowtica.link/odoo-api/' });
     }
 
+    // ชุดจัดการ token: จำกัดอัตราแล้วปล่อยให้ router ตรวจ ADMIN_TOKEN เอง
+    if (isAdmin) {
+      if (rateLimited(`admin|${ip}`, adminPerMin)) {
+        console.warn(`[api] แอดมินชนลิมิต จาก ${ip}`);
+        return res.status(429).json({ success: false, error: `เรียกเกิน ${adminPerMin} ครั้ง/นาที` });
+      }
+      res.on('finish', () => {
+        console.log(`[api] (แอดมิน) ${ip} ${req.method} ${req.originalUrl} ` +
+          `→ ${res.statusCode} (${Date.now() - started}ms)`);
+      });
+      return next();
+    }
+
     const h = req.headers.authorization || '';
     const provided = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
-    const match = provided && tokens.find((t) => sameToken(t.token, provided));
+    const match = tokenStore.findByToken(provided);
     if (!match) {
-      console.warn(`[api] ปฏิเสธ (token ไม่ถูกต้อง) ${req.method} ${req.path} จาก ${ip}`);
+      console.warn(`[api] ปฏิเสธ (token ไม่ถูกต้องหรือถูกปิด) ${req.method} ${req.path} จาก ${ip}`);
       return res.status(401).json({ success: false, error: 'ต้องส่ง Authorization: Bearer <token>' });
     }
 
-    if (rateLimited(`${match.label}|${ip}`, perMin)) {
+    if (rateLimited(`${match.id}|${ip}`, perMin)) {
       console.warn(`[api] ชนลิมิต ${match.label} จาก ${ip}`);
       return res.status(429).json({ success: false, error: `เรียกเกิน ${perMin} ครั้ง/นาที` });
     }
 
     req.apiClient = match.label;
+    tokenStore.recordUse(match.id);
     res.on('finish', () => {
       console.log(`[api] ${match.label} ${ip} ${req.method} ${req.originalUrl} ` +
         `→ ${res.statusCode} (${Date.now() - started}ms)`);
@@ -104,4 +109,4 @@ function createPublicGuard() {
   };
 }
 
-module.exports = { createPublicGuard, ALLOWED_PATHS };
+module.exports = { createPublicGuard, ALLOWED_PATHS, ADMIN_PATHS };

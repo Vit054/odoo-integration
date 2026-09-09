@@ -35,6 +35,11 @@ if (!PUBLIC_MODE) {
   });
 }
 
+// หน้าจัดการ token ของทีมภายนอก — เปิดได้ทั้งสองโหมด, ตรวจสิทธิ์ด้วย ADMIN_TOKEN ที่ใส่ในหน้า
+app.get('/tokens', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'tokens.html'));
+});
+
 // Odoo API routes
 const odooApi = require('./odoo-api');
 if (PUBLIC_MODE) {

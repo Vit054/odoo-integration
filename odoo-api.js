@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const odoo = require('./odoo-connection');
 const configStore = require('./config-store');
+const tokenStore = require('./token-store');
 
 // Bangkok "today" (invoice_date is a DATE column — no TZ conversion needed on it)
 const TODAY_BKK = `(now() AT TIME ZONE 'Asia/Bangkok')::date`;
@@ -742,6 +743,65 @@ router.post('/insert/:table', requireToken, async (req, res) => {
     console.error('insert error:', e);
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// จัดการ token ของทีมภายนอก (ใช้ ADMIN_TOKEN) — หน้าเว็บอยู่ที่ /tokens
+// เปลี่ยนแล้วมีผลทันทีไม่ต้อง restart (เก็บใน tokens.json)
+
+// token มีความหมายเฉพาะเซิร์ฟเวอร์ API สาธารณะ — บน intranet ให้ตอบ 404 กันสับสน
+function requirePublicMode(req, res, next) {
+  if (process.env.PUBLIC_MODE !== "1") {
+    return res.status(404).json({
+      success: false,
+      error: "หน้าจัดการ token ใช้ได้เฉพาะเซิร์ฟเวอร์ API สาธารณะ (https://flowtica.link/odoo-api/tokens)",
+    });
+  }
+  next();
+}
+
+const MAX_LABEL = 60;
+const MAX_NOTE = 200;
+
+router.get('/tokens', requirePublicMode, requireToken, (req, res) => {
+  res.json({ success: true, data: tokenStore.list() });
+});
+
+router.post('/tokens', requirePublicMode, requireToken, (req, res) => {
+  const { label, note } = req.body || {};
+  if (!label || typeof label !== 'string' || !label.trim()) {
+    return res.status(400).json({ success: false, error: 'ต้องระบุชื่อทีม (label)' });
+  }
+  if (label.length > MAX_LABEL || (note && String(note).length > MAX_NOTE)) {
+    return res.status(400).json({ success: false, error: `ชื่อทีมยาวไม่เกิน ${MAX_LABEL} ตัว หมายเหตุไม่เกิน ${MAX_NOTE} ตัว` });
+  }
+  const rec = tokenStore.create({ label, note });
+  console.log(`[token] สร้าง token ใหม่ให้ "${rec.label}" (${rec.id})`);
+  res.status(201).json({ success: true, data: rec });
+});
+
+router.put('/tokens/:id', requirePublicMode, requireToken, (req, res) => {
+  const { label, note, enabled, rotate } = req.body || {};
+  if (label !== undefined && String(label).length > MAX_LABEL) {
+    return res.status(400).json({ success: false, error: `ชื่อทีมยาวไม่เกิน ${MAX_LABEL} ตัว` });
+  }
+  if (note !== undefined && String(note).length > MAX_NOTE) {
+    return res.status(400).json({ success: false, error: `หมายเหตุยาวไม่เกิน ${MAX_NOTE} ตัว` });
+  }
+  const rec = tokenStore.update(req.params.id, { label, note, enabled, rotate });
+  if (!rec) return res.status(404).json({ success: false, error: 'ไม่พบ token นี้' });
+  console.log(`[token] แก้ไข "${rec.label}" (${rec.id})${rotate ? ' + ออก token ใหม่' : ''}` +
+    `${enabled !== undefined ? ` สถานะ=${rec.enabled ? 'เปิด' : 'ปิด'}` : ''}`);
+  res.json({ success: true, data: rec });
+});
+
+router.delete('/tokens/:id', requirePublicMode, requireToken, (req, res) => {
+  const rec = tokenStore.list().find((t) => t.id === req.params.id);
+  if (!tokenStore.remove(req.params.id)) {
+    return res.status(404).json({ success: false, error: 'ไม่พบ token นี้' });
+  }
+  console.log(`[token] ลบ "${rec ? rec.label : req.params.id}" ออกจากระบบ`);
+  res.json({ success: true });
 });
 
 module.exports = router;
