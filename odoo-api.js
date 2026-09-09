@@ -585,6 +585,13 @@ router.get('/schema/:tableName', async (req, res) => {
   res.json(result);
 });
 
+// query นี้วิ่งบน DB production จริง จึงล้อมกรอบไว้ 3 ชั้น:
+//   - transaction READ ONLY (ต่อให้หลุด regex มา ก็เขียนอะไรไม่ได้)
+//   - statement_timeout กัน query หนักค้างแล้วลาก Odoo ไปด้วย
+//   - ครอบ LIMIT กันดึงทั้งตารางจนหน่วยความจำแตก (บอกกลับด้วยว่าโดนตัดหรือไม่)
+const QUERY_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT_MS, 10) || 20000;
+const QUERY_MAX_ROWS = parseInt(process.env.QUERY_MAX_ROWS, 10) || 5000;
+
 router.post('/query', async (req, res) => {
   const { sql } = req.body;
   if (!sql || typeof sql !== 'string') {
@@ -594,8 +601,34 @@ router.post('/query', async (req, res) => {
   if (trimmed.includes(';') || !/^(SELECT|WITH)\b/i.test(trimmed)) {
     return res.status(403).json({ success: false, error: 'Only single SELECT/WITH queries are allowed.' });
   }
-  const result = await odoo.executeQuery(trimmed);
-  res.json(result);
+
+  let client;
+  try {
+    client = await odoo.pool.connect();
+    await client.query('BEGIN READ ONLY');
+    await client.query(`SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS}`);
+    const r = await client.query(`SELECT * FROM (${trimmed}) AS _q LIMIT ${QUERY_MAX_ROWS + 1}`);
+    await client.query('COMMIT');
+
+    const truncated = r.rows.length > QUERY_MAX_ROWS;
+    const rows = truncated ? r.rows.slice(0, QUERY_MAX_ROWS) : r.rows;
+    res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+      truncated,
+      ...(truncated ? { note: `ผลลัพธ์ถูกตัดที่ ${QUERY_MAX_ROWS} แถว — ใส่ LIMIT/OFFSET เพื่อดึงเป็นช่วง` } : {}),
+    });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    const timedOut = /statement timeout|canceling statement/i.test(e.message);
+    res.status(timedOut ? 408 : 400).json({
+      success: false,
+      error: timedOut ? `query ใช้เวลาเกิน ${QUERY_TIMEOUT_MS / 1000} วินาที` : e.message,
+    });
+  } finally {
+    if (client) client.release();
+  }
 });
 
 // ---------------------------------------------------------------------------
