@@ -63,6 +63,9 @@ if ($auth !== null) {
 }
 $headers[] = 'Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'application/json');
 $headers[] = 'Accept: application/json';
+// ส่ง IP ผู้เรียกจริงต่อไปด้วย ไม่งั้น log ฝั่ง VPS เห็นแต่ IP ของ Hostinger (ตรวจย้อนหลังไม่ได้)
+// ใช้ชื่อ X-Client-IP เพราะ Caddy บน VPS จะเขียนทับ X-Forwarded-For ที่มาจากต้นทางที่ไม่ได้ประกาศเป็น trusted proxy
+$headers[] = 'X-Client-IP: ' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $body = in_array($method, ['POST', 'PUT', 'PATCH'], true) ? file_get_contents('php://input') : null;

@@ -69,7 +69,10 @@ function createPublicGuard() {
 
   return function publicGuard(req, res, next) {
     const started = Date.now();
-    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+    // X-Client-IP = IP ผู้เรียกจริงที่ proxy ฝั่ง Hostinger แนบมา
+    // (ใช้ชื่อนี้เพราะ Caddy เขียนทับ X-Forwarded-For ที่มาจากต้นทางนอก trusted_proxies)
+    const ip = req.headers['x-client-ip'] ||
+      (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
 
     if (!ALLOWED_PATHS.some((re) => re.test(req.path))) {
       return res.status(404).json({ success: false, error: 'ไม่มี endpoint นี้ในชุดสาธารณะ' });
