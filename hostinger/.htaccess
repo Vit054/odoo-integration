@@ -1,0 +1,14 @@
+# CFF Odoo API proxy — ส่งทุก path ใต้ /odoo-api/ เข้า index.php
+RewriteEngine On
+RewriteBase /odoo-api/
+
+# ส่ง header Authorization ต่อให้ PHP (บาง host ตัดทิ้งเมื่อรันเป็น CGI/FPM)
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+RewriteRule ^index\.php$ - [L]
+RewriteRule ^(.*)$ index.php?__p=$1 [QSA,L]
+
+<Files "config.php">
+    Require all denied
+</Files>

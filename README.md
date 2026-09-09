@@ -104,3 +104,31 @@ PORT=3105 node server.js     # เปิด http://localhost:3105
 - หน้าเว็บ refresh อัตโนมัติทุก 60 วินาที + server cache 60 วินาที → ข้อมูลหน่วงสูงสุด ~2 นาที
 - ไม่มีระบบ login — เข้าถึงได้ทั้ง LAN (ถ้าต้องการจำกัดสิทธิ์ให้เพิ่ม Basic Auth ที่ Apache หรือ token ใน Express)
 - helper `odoo_connection.py` / `odoo-connection.php` เป็นตัวอย่างต่อ DB ภาษาอื่น ไม่ได้ใช้ใน production
+
+## ตัวที่สอง: API สาธารณะสำหรับทีมภายนอก (VPS)
+
+โค้ดชุดเดียวกัน deploy ซ้ำอีกตัวในโหมด `PUBLIC_MODE=1` เพื่อให้ทีมภายนอกเรียกจากอินเทอร์เน็ตได้
+(ตัวบน intranet ไม่เกี่ยวข้องกัน แก้คนละที่ รีสตาร์ตคนละ service)
+
+```
+ทีมภายนอก ──HTTPS──> https://flowtica.link/odoo-api/...  (Hostinger: public_html/odoo-api/)
+        ── PHP proxy (curl, ส่ง Authorization ต่อ + แนบ X-Proxy-Secret) ──>
+        https://monitor.flowtica.link/odoo/...            (VPS 118.27.147.123, Caddy)
+        ──> 127.0.0.1:3005  systemd: odoo-api  (/opt/odoo-api, user odooapi)
+        ──> PostgreSQL 203.151.190.135 (odoo_cff_golive)
+```
+
+- **ทำไมต้องผ่าน Hostinger:** เครือข่ายออฟฟิศบล็อก HTTPS ตรงไป IP ของ VPS (ดู DW Watch)
+  ยิงผ่าน flowtica.link แล้วให้ Hostinger คุยกับ VPS แบบ server-to-server จึงใช้ได้ทั้งในและนอกออฟฟิศ
+- **DB ล็อกด้วย pg_hba รายไอพี** — ทั้ง IP ออฟฟิศและ IP ของ VPS ต้องอยู่ใน allowlist
+  (เคยพังมาแล้วเมื่อ 9 ก.ย. 2569 เพราะ IP ออฟฟิศหลุด allowlist → dashboard ดึงข้อมูลไม่ได้ทั้งระบบ)
+- **โหมดสาธารณะเปิดแค่ 4 endpoint:** `tables`, `schema/:table`, `query`, `insert/:table` — ที่เหลือ 404
+  ไม่เสิร์ฟหน้าเว็บใด ๆ (ไม่มี dashboard/insights/config/APIGuide) และ bind แค่ 127.0.0.1
+- **token:** `API_TOKENS="ชื่อทีม:token,ทีม2:token2"` ใน `/opt/odoo-api/.env.local` — เพิ่ม/ถอนรายทีมแล้ว
+  `systemctl restart odoo-api` · ไม่ตั้ง `ADMIN_TOKEN` = ปิด INSERT สนิท
+- **ดู log ว่าใครเรียกอะไร:** `journalctl -u odoo-api -f`
+- **อัปเดตโค้ดบน VPS:** `scp` ไฟล์ .js ขึ้น `/opt/odoo-api/` แล้ว `systemctl restart odoo-api`
+  (ไม่ได้ใช้ git บนเครื่องนั้น เพราะ repo เป็น private และไม่อยากวาง credential ไว้)
+- ต้นทางไฟล์ proxy ของ Hostinger อยู่ที่ `hostinger/` ในรีโปนี้ (ตัว `config.php` อยู่บน server เท่านั้น)
+  ⚠️ ต้องมี `"odoo-api"` ใน `PRESERVE_DIRS` ของ `scripts/deploy_remote.sh` ในรีโป Flowtica
+  ไม่งั้น deploy เว็บทับแล้วโฟลเดอร์นี้หายทั้งชุด

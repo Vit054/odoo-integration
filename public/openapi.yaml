@@ -15,8 +15,14 @@ info:
     name: IT/EDP — CITY FRESH FRUIT CO., LTD.
 
 servers:
+  - url: https://flowtica.link/odoo-api
+    description: Production สำหรับทีมภายนอก (HTTPS — ต้องแนบ Bearer token ทุก request)
   - url: http://192.168.101.104/Odoo
-    description: Production (LAN เท่านั้น)
+    description: ภายในบริษัท (LAN — ไม่ต้องใช้ token)
+
+# ทุก endpoint ต้องมี token เมื่อเรียกผ่าน URL สาธารณะ (ยกเว้น /health)
+security:
+  - bearerAuth: []
 
 tags:
   - name: System

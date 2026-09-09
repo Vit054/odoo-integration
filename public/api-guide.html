@@ -159,9 +159,9 @@
   <h1>Odoo API Developer Guide</h1>
   <div class="sub">คู่มือเชื่อมต่อดึงข้อมูลระบบ Odoo 14 ผ่าน REST API สำหรับนักพัฒนาและทีมที่ได้รับอนุญาต</div>
   <div class="meta">
-    <span>📄 เวอร์ชัน: กรกฎาคม 2026 (API v2.0.0)</span>
-    <span>🌐 Base URL: <b>http://192.168.101.104/Odoo</b></span>
-    <span>🔒 ใช้ได้เฉพาะเครือข่ายภายในบริษัท (LAN)</span>
+    <span>📄 เวอร์ชัน: กันยายน 2026 (API v2.1.0)</span>
+    <span>🌐 Base URL: <b>https://flowtica.link/odoo-api</b></span>
+    <span>🔑 ทุก request ต้องมี Authorization: Bearer &lt;token&gt;</span>
   </div>
   <div class="downloads">
     <a href="CFF-Odoo-API-Guide.pdf" download>⬇ ดาวน์โหลดคู่มือ (PDF)</a>
@@ -172,13 +172,13 @@
 
 <h2 id="overview"><span class="no">1</span>ภาพรวม</h2>
 
-<pre><code>แอปของคุณ (ใน LAN) ──HTTP/JSON──&gt;  http://192.168.101.104/Odoo/api/odoo/*
+<pre><code>แอปของคุณ (จากที่ไหนก็ได้) ──HTTPS/JSON──&gt;  https://flowtica.link/odoo-api/api/odoo/*
                                         │  API Gateway (ควบคุมสิทธิ์การอ่าน/เขียน)
                                         ▼
                                   ฐานข้อมูล Odoo 14 ของบริษัท</code></pre>
 
 <ul>
-  <li><b>Base URL:</b> <code>http://192.168.101.104/Odoo</code> — เรียกได้เฉพาะจากเครือข่ายภายในบริษัทเท่านั้น</li>
+  <li><b>Base URL:</b> <code>https://flowtica.link/odoo-api</code> — เรียกได้จากอินเทอร์เน็ต (HTTPS) <b>ต้องแนบ token ทุก request</b></li>
   <li>API เป็น <b>read-only เป็นหลัก</b> — การเขียนข้อมูล (INSERT) ต้องใช้ token และเปิดสิทธิ์รายตาราง</li>
   <li>ข้อมูลอ่านจากฐานข้อมูลจริงของ Odoo → ได้ข้อมูลชุดเดียวกับที่เห็นใน Odoo</li>
   <li>ทุก response เป็น JSON รูปแบบเดียวกัน:</li>
@@ -193,21 +193,25 @@
 <h3>การขอสิทธิ์ใช้งาน</h3>
 <div class="tablewrap"><table>
   <tr><th style="width:45%">ต้องการ</th><th>ต้องทำอะไร</th></tr>
-  <tr><td>อ่านข้อมูล (Read API)</td><td>ไม่ต้องขอ token — เครื่องที่อยู่ใน LAN บริษัทเรียกได้เลย</td></tr>
+  <tr><td>อ่านข้อมูล (Read API)</td><td>ติดต่อฝ่าย IT/EDP เพื่อรับ token ประจำทีม (1 ทีม 1 token เพิกถอนรายทีมได้)</td></tr>
   <tr><td>เขียนข้อมูล (INSERT)</td><td>ติดต่อผู้ดูแลระบบ (ฝ่าย IT/EDP) เพื่อ (1) รับ token และ (2) ขอเปิดสิทธิ์ตารางที่ต้องการเขียน</td></tr>
 </table></div>
 
 <h2 id="quickstart"><span class="no">2</span>เริ่มต้นเร็วที่สุด (Quick Start)</h2>
 
-<pre><code># 1) เช็คว่า server ออนไลน์
-curl http://192.168.101.104/Odoo/health
+<pre><code># ตั้งค่า token ที่ได้รับจากฝ่าย IT/EDP ก่อน
+export TOKEN="&lt;token ที่ได้รับ&gt;"
+
+# 1) เช็คว่า server ออนไลน์ (endpoint เดียวที่ไม่ต้องใช้ token)
+curl https://flowtica.link/odoo-api/health
 # → {"status":"ok","message":"Odoo dashboard server is running"}
 
 # 2) ดูรายชื่อตารางทั้งหมดใน Odoo
-curl http://192.168.101.104/Odoo/api/odoo/tables
+curl -H "Authorization: Bearer $TOKEN" https://flowtica.link/odoo-api/api/odoo/tables
 
 # 3) ยิง SQL query แรกของคุณ
-curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
+curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT id, name FROM res_partner ORDER BY id LIMIT 5"}'</code></pre>
 
@@ -224,7 +228,7 @@ curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
 
 <h3><span class="method get">GET</span><code>/api/odoo/schema/:tableName</code> — โครงสร้างตาราง</h3>
 <p>ดูคอลัมน์ ชนิดข้อมูล และ nullable ของตารางที่สนใจ</p>
-<pre><code>curl http://192.168.101.104/Odoo/api/odoo/schema/res_partner
+<pre><code>curl -H "Authorization: Bearer $TOKEN" https://flowtica.link/odoo-api/api/odoo/schema/res_partner
 
 # → { "success": true, "data": [
 #      { "column_name": "id", "data_type": "integer", "is_nullable": "NO" }, ... ] }</code></pre>
@@ -236,7 +240,8 @@ curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
   <li><b>ใส่ <code>LIMIT</code> เสมอ</b> — query ยิงเข้าฐานข้อมูลที่ระบบงานจริงใช้อยู่ (ดูข้อ <a href="#fairuse">Fair Use</a>)</li>
   <li>Timestamp ในฐานข้อมูลเก็บเป็น <b>UTC</b> — แปลงเป็นเวลาไทยด้วย <code>AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'</code> (คอลัมน์ชนิด DATE เช่น <code>invoice_date</code> ใช้ตรง ๆ ได้)</li>
 </ul>
-<pre><code>curl -X POST http://192.168.101.104/Odoo/api/odoo/query \
+<pre><code>curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT name, email FROM res_partner WHERE customer_rank &gt; 0 ORDER BY id DESC LIMIT 20"}'
 
@@ -263,12 +268,12 @@ x-api-key: &lt;token&gt;                ← ทางเลือก</code></pre
   <li>เติม <code>?dryRun=1</code> เพื่อดู SQL ที่จะรันโดย<b>ไม่เขียนจริง</b> — <b>ใช้ทดสอบก่อนยิงจริงทุกครั้ง</b></li>
 </ul>
 <pre><code># ทดสอบก่อน (ไม่เขียนจริง)
-curl -X POST "http://192.168.101.104/Odoo/api/odoo/insert/my_table?dryRun=1" \
+curl -X POST "https://flowtica.link/odoo-api/api/odoo/insert/my_table?dryRun=1" \
   -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
   -d '{"data": {"name": "ทดสอบ", "qty": 5}}'
 
 # ยิงจริง
-curl -X POST http://192.168.101.104/Odoo/api/odoo/insert/my_table \
+curl -X POST https://flowtica.link/odoo-api/api/odoo/insert/my_table \
   -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
   -d '{"data": [{"name": "A", "qty": 1}, {"name": "B", "qty": 2}]}'</code></pre>
 <p><b>Response สำเร็จ</b> — คืนแถวที่ insert แล้วทั้งหมด (รวมค่า default เช่น <code>id</code>):</p>
@@ -322,11 +327,12 @@ WHERE am.move_type IN ('out_invoice','out_refund')
 <h2 id="examples" class="pagebreak-print"><span class="no">7</span>ตัวอย่างโค้ดภาษาต่าง ๆ</h2>
 
 <h3>JavaScript (fetch)</h3>
-<pre><code>const BASE = 'http://192.168.101.104/Odoo';
+<pre><code>const BASE = 'https://flowtica.link/odoo-api';
+const TOKEN = '&lt;token ที่ได้รับจากฝ่าย IT/EDP&gt;';
 
 const q = await fetch(`${BASE}/api/odoo/query`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
   body: JSON.stringify({ sql: 'SELECT name FROM res_partner LIMIT 5' }),
 }).then(r =&gt; r.json());
 
@@ -336,10 +342,11 @@ console.log(q.data);</code></pre>
 <h3>Python (requests)</h3>
 <pre><code>import requests
 
-BASE = 'http://192.168.101.104/Odoo'
+BASE = 'https://flowtica.link/odoo-api'
+HEAD = {'Authorization': 'Bearer &lt;token ที่ได้รับจากฝ่าย IT/EDP&gt;'}
 
 # SQL query
-r = requests.post(f'{BASE}/api/odoo/query',
+r = requests.post(f'{BASE}/api/odoo/query', headers=HEAD,
                   json={'sql': 'SELECT name FROM res_partner LIMIT 5'})
 body = r.json()
 assert body['success'], body.get('error')
@@ -351,13 +358,13 @@ r = requests.post(f'{BASE}/api/odoo/insert/my_table',
                   json={'data': {'name': 'ทดสอบ', 'qty': 5}})</code></pre>
 
 <h3>PHP (cURL)</h3>
-<pre><code>$base = 'http://192.168.101.104/Odoo';
+<pre><code>$base = 'https://flowtica.link/odoo-api';
 
 $ch = curl_init("$base/api/odoo/query");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER =&gt; true,
     CURLOPT_POST =&gt; true,
-    CURLOPT_HTTPHEADER =&gt; ['Content-Type: application/json'],
+    CURLOPT_HTTPHEADER =&gt; ['Content-Type: application/json', 'Authorization: Bearer &lt;token&gt;'],
     CURLOPT_POSTFIELDS =&gt; json_encode(['sql' =&gt; 'SELECT name FROM res_partner LIMIT 5']),
 ]);
 $body = json_decode(curl_exec($ch), true);
@@ -372,8 +379,8 @@ print_r($body['data']);</code></pre>
   ถ้าต้องการผลลัพธ์ SQL ใน Excel ให้ใช้ <code>Web.Contents</code> แบบ POST:
   <pre><code>let
   Source = Json.Document(Web.Contents(
-    "http://192.168.101.104/Odoo/api/odoo/query",
-    [ Headers = [#"Content-Type"="application/json"],
+    "https://flowtica.link/odoo-api/api/odoo/query",
+    [ Headers = [#"Content-Type"="application/json", #"Authorization"="Bearer &lt;token&gt;"],
       Content = Json.FromValue([sql = "SELECT name FROM res_partner LIMIT 100"]) ])),
   Rows = Table.FromRecords(Source[data])
 in

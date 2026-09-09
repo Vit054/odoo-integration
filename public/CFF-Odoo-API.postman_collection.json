@@ -5,8 +5,10 @@
     "description": "REST API สำหรับดึงข้อมูลจากระบบ Odoo 14 ของ CITY FRESH FRUIT\n\n- ใช้ได้เฉพาะเครือข่ายภายในบริษัท (LAN)\n- Read API ไม่ต้องใช้ token\n- Write API (INSERT) ต้องตั้งค่า variable `adminToken` (ขอจากฝ่าย IT/EDP) และตารางต้องได้รับอนุญาตก่อน\n\nFair Use: ใส่ LIMIT ทุก query, อย่า SELECT * จากตารางใหญ่, อย่า polling ถี่เกินจำเป็น",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{apiToken}}", "type": "string" } ] },
   "variable": [
-    { "key": "baseUrl", "value": "http://192.168.101.104/Odoo", "type": "string" },
+    { "key": "baseUrl", "value": "https://flowtica.link/odoo-api", "type": "string" },
+    { "key": "apiToken", "value": "", "type": "string" },
     { "key": "adminToken", "value": "", "type": "string" }
   ],
   "item": [
