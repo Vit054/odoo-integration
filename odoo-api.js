@@ -746,7 +746,7 @@ router.post('/insert/:table', requireToken, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// จัดการ token ของทีมภายนอก (ใช้ ADMIN_TOKEN) — หน้าเว็บอยู่ที่ /tokens
+// จัดการ token ของระบบที่มาเรียกเกตเวย์ (ใช้ ADMIN_TOKEN) — หน้าเว็บอยู่ที่ /tokens
 // เปลี่ยนแล้วมีผลทันทีไม่ต้อง restart (เก็บใน tokens.json)
 
 // token มีความหมายเฉพาะเซิร์ฟเวอร์ API สาธารณะ — บน intranet ให้ตอบ 404 กันสับสน
@@ -754,7 +754,7 @@ function requirePublicMode(req, res, next) {
   if (process.env.PUBLIC_MODE !== "1") {
     return res.status(404).json({
       success: false,
-      error: "หน้าจัดการ token ใช้ได้เฉพาะเซิร์ฟเวอร์ API สาธารณะ (https://flowtica.link/odoo-api/tokens)",
+      error: "หน้าจัดการ token ใช้ได้เฉพาะเซิร์ฟเวอร์เกตเวย์ (http://192.168.101.121:3005/tokens)",
     });
   }
   next();

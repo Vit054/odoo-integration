@@ -105,48 +105,68 @@ PORT=3105 node server.js     # เปิด http://localhost:3105
 - ไม่มีระบบ login — เข้าถึงได้ทั้ง LAN (ถ้าต้องการจำกัดสิทธิ์ให้เพิ่ม Basic Auth ที่ Apache หรือ token ใน Express)
 - helper `odoo_connection.py` / `odoo-connection.php` เป็นตัวอย่างต่อ DB ภาษาอื่น ไม่ได้ใช้ใน production
 
-## ตัวที่สอง: API สาธารณะสำหรับทีมภายนอก (VPS)
+## ตัวที่สอง: เกตเวย์ SQL สำหรับระบบอื่นในออฟฟิศ (VPS ออฟฟิศ 192.168.101.121)
 
-โค้ดชุดเดียวกัน deploy ซ้ำอีกตัวในโหมด `PUBLIC_MODE=1` เพื่อให้ทีมภายนอกเรียกจากอินเทอร์เน็ตได้
-(ตัวบน intranet ไม่เกี่ยวข้องกัน แก้คนละที่ รีสตาร์ตคนละ service)
+โค้ดชุดเดียวกัน deploy ซ้ำอีกตัวในโหมด `PUBLIC_MODE=1` ให้ระบบอื่นเรียก SQL อ่าน Odoo ได้
+(ตัวบน intranet 192.168.101.104 ไม่เกี่ยวข้องกัน แก้คนละที่ รีสตาร์ตคนละ service)
 
 ```
-ทีมภายนอก ──HTTPS──> https://flowtica.link/odoo-api/...  (Hostinger: public_html/odoo-api/)
-        ── PHP proxy (curl, ส่ง Authorization ต่อ + แนบ X-Proxy-Secret) ──>
-        https://monitor.flowtica.link/odoo/...            (VPS 118.27.147.123, Caddy)
-        ──> 127.0.0.1:3005  systemd: odoo-api  (/opt/odoo-api, user odooapi)
-        ──> PostgreSQL 203.151.190.135 (odoo_cff_golive)
+ระบบอื่นในวง LAN ──HTTP──> http://192.168.101.121:3005/api/odoo/...
+                 ──> node server.js  (systemd --user: odoo-api, /home/vittawat/apps/odoo-api)
+                 ──> PostgreSQL 203.151.190.135 (odoo_cff_golive)
 ```
 
-- **ทำไมต้องผ่าน Hostinger:** เครือข่ายออฟฟิศบล็อก HTTPS ตรงไป IP ของ VPS (ดู DW Watch)
-  ยิงผ่าน flowtica.link แล้วให้ Hostinger คุยกับ VPS แบบ server-to-server จึงใช้ได้ทั้งในและนอกออฟฟิศ
-- **DB ล็อกด้วย pg_hba รายไอพี** — ทั้ง IP ออฟฟิศและ IP ของ VPS ต้องอยู่ใน allowlist
-  (เคยพังมาแล้วเมื่อ 9 ก.ย. 2569 เพราะ IP ออฟฟิศหลุด allowlist → dashboard ดึงข้อมูลไม่ได้ทั้งระบบ)
-- **โหมดสาธารณะเปิดแค่ 4 endpoint:** `tables`, `schema/:table`, `query`, `insert/:table` — ที่เหลือ 404
-  ไม่เสิร์ฟหน้าเว็บใด ๆ (ไม่มี dashboard/insights/config/APIGuide) และ bind แค่ 127.0.0.1
-- **token:** `API_TOKENS="ชื่อทีม:token,ทีม2:token2"` ใน `/opt/odoo-api/.env.local` — เพิ่ม/ถอนรายทีมแล้ว
-  `systemctl restart odoo-api` · ไม่ตั้ง `ADMIN_TOKEN` = ปิด INSERT สนิท
-- **ดู log ว่าใครเรียกอะไร:** `journalctl -u odoo-api -f`
-- **อัปเดตโค้ดบน VPS:** `scp` ไฟล์ .js ขึ้น `/opt/odoo-api/` แล้ว `systemctl restart odoo-api`
-  (ไม่ได้ใช้ git บนเครื่องนั้น เพราะ repo เป็น private และไม่อยากวาง credential ไว้)
-- ต้นทางไฟล์ proxy ของ Hostinger อยู่ที่ `hostinger/` ในรีโปนี้ (ตัว `config.php` อยู่บน server เท่านั้น)
-  ⚠️ ต้องมี `"odoo-api"` ใน `PRESERVE_DIRS` ของ `scripts/deploy_remote.sh` ในรีโป Flowtica
-  ไม่งั้น deploy เว็บทับแล้วโฟลเดอร์นี้หายทั้งชุด
+**ย้ายมาจาก VPS 118.27.147.123 เมื่อ 14 ก.ย. 2569** — ของเดิมเรียกผ่าน
+`https://flowtica.link/odoo-api/` → PHP proxy บน Hostinger → Caddy บน VPS → `127.0.0.1:3005`
+ทั้งที่ผู้ใช้ตัวจริง (connector ของ `sales-data-hub`) รันอยู่ในออฟฟิศอยู่แล้ว
+ข้อมูลจึงวิ่งออกเน็ตไปกลับโดยไม่จำเป็น ย้ายมาแล้วเหลือ hop เดียว (0.5–0.9 วิ → 0.2 วิ)
+และตัดจุดพังทิ้งได้ 2 จุด (Hostinger, VPS)
 
-### หน้าจัดการ token: `https://flowtica.link/odoo-api/tokens`
+- **DB ล็อกด้วย pg_hba รายไอพี** — IP ขาออกของออฟฟิศ (`119.76.182.201`) อยู่ใน allowlist อยู่แล้ว
+  เพราะ dashboard บน .104 ใช้เส้นเดียวกัน ถ้า IP ออฟฟิศเปลี่ยนเมื่อไร **พังทั้ง .104 และ .121 พร้อมกัน**
+  (เคยพังมาแล้วเมื่อ 9 ก.ย. 2569 เพราะ IP ออฟฟิศหลุด allowlist)
+- **เปิดแค่ 4 endpoint:** `tables`, `schema/:table`, `query`, `insert/:table` — ที่เหลือ 404
+  ไม่เสิร์ฟหน้า dashboard/insights/config/APIGuide
+- **bind `0.0.0.0` ตั้งผ่าน `BIND_HOST` ใน `.env.local`** — ต่างจากตอนอยู่บน VPS ที่ bind แค่ `127.0.0.1`
+  เพราะตอนนั้นมี Caddy อยู่หน้าบ้าน ตอนนี้ไม่มี proxy แล้วจึงต้องรับตรง
+  ⚠️ เครื่องนี้เป็น IP วงใน ไม่มี NAT เข้าจากอินเทอร์เน็ต — **ห้าม forward พอร์ต 3005 ออกเน็ต**
+  ถ้าจะเปิดให้นอกออฟฟิศเรียกอีก ต้องกลับไปมี TLS + proxy หน้าบ้านก่อน
+- **`PROXY_SECRET` เว้นว่าง** เพราะไม่มี proxy ให้พิสูจน์ตัวแล้ว — ด่านที่เหลือคือ Bearer token + rate limit
+- **ดู log ว่าใครเรียกอะไร:** `journalctl --user -u odoo-api -f`
+- **ต้องเปิด linger ไว้** (`sudo loginctl enable-linger vittawat`) ไม่งั้น service ตายตอน logout
+  บัญชี `vittawat` บนเครื่องนี้ sudo ต้องใส่รหัสผ่านแบบ interactive จึงสั่งจากสคริปต์ไม่ได้
 
-ดู / สร้าง / แก้ไข / ปิด-เปิด / ออกใหม่ / ลบ token ของทีมภายนอกได้จากหน้าเว็บ ใส่ `ADMIN_TOKEN` ในหน้า
-(เก็บใน `tokens.json` บน VPS — **แก้แล้วมีผลทันที ไม่ต้อง restart**)
+### อัปเดตเวอร์ชันใหม่
+
+```bash
+scp server.js odoo-api.js odoo-connection.js config-store.js token-store.js public-guard.js     package.json package-lock.json vittawat@192.168.101.121:~/apps/odoo-api/
+scp public/tokens.html vittawat@192.168.101.121:~/apps/odoo-api/public/
+ssh vittawat@192.168.101.121 'cd ~/apps/odoo-api && npm install --omit=dev && systemctl --user restart odoo-api'
+```
+
+(ไม่ได้ใช้ git บนเครื่องนั้น เพราะ repo เป็น private และไม่อยากวาง credential ไว้ —
+เหตุผลเดียวกับตอนอยู่บน VPS)
+
+### หน้าจัดการ token: `http://192.168.101.121:3005/tokens`
+
+ดู / สร้าง / แก้ไข / ปิด-เปิด / ออกใหม่ / ลบ token ของแต่ละระบบได้จากหน้าเว็บ ใส่ `ADMIN_TOKEN` ในหน้า
+(เก็บใน `tokens.json` บนเครื่อง — **แก้แล้วมีผลทันที ไม่ต้อง restart**)
 
 | ปุ่ม | ผล |
 |---|---|
 | ✏️ แก้ไข | เปลี่ยนชื่อทีม/หมายเหตุ (ไม่กระทบค่า token) |
-| ⏸ / ▶️ | ปิด-เปิดใช้ชั่วคราว — ปิดแล้วทีมนั้นโดน 401 ทันทีแต่ประวัติยังอยู่ |
+| ⏸ / ▶️ | ปิด-เปิดใช้ชั่วคราว — ปิดแล้วระบบนั้นโดน 401 ทันทีแต่ประวัติยังอยู่ |
 | 🔄 ออก token ใหม่ | สุ่มค่าใหม่ ค่าเดิมใช้ไม่ได้ทันที (ใช้ตอนสงสัยว่า token รั่ว) |
 | 🗑 ลบ | ลบถาวร |
 
 - หน้านี้ทำงานเฉพาะเครื่องที่ตั้ง `PUBLIC_MODE=1` (บน intranet จะตอบ 404 กันสับสน เพราะ token ไม่มีผลที่นั่น)
-- ครั้งแรกที่รัน ระบบย้าย token จาก `API_TOKENS` ใน `.env.local` เข้า `tokens.json` ให้อัตโนมัติ
-  หลังจากนั้นค่าใน `API_TOKENS` ไม่ถูกใช้แล้ว (ลบทิ้งได้)
-- ทุกแถวเก็บสถิติ **ใช้ล่าสุด / จำนวนครั้งที่เรียก** ให้เห็นว่าทีมไหนยังใช้อยู่จริง (เขียนลงไฟล์ทุก 30 วินาที)
-- หน้าเว็บเปิดสาธารณะได้แต่ทำอะไรไม่ได้ถ้าไม่มี `ADMIN_TOKEN` · เรียก API แอดมินจำกัด 30 ครั้ง/นาที/IP
+- ทุกแถวเก็บสถิติ **ใช้ล่าสุด / จำนวนครั้งที่เรียก** ให้เห็นว่าระบบไหนยังใช้อยู่จริง (เขียนลงไฟล์ทุก 30 วินาที)
+- `ADMIN_TOKEN` กับ token ของ `sales-data-hub` เก็บไว้ที่ `%USERPROFILE%\.sales-data-hub\odoo-api-tokens.txt`
+  (นอกโฟลเดอร์ OneDrive โดยตั้งใจ)
+
+### ของเดิมบน Hostinger + VPS — ยังไม่ได้ปิด
+
+โฟลเดอร์ `hostinger/` ในรีโปนี้คือ PHP proxy ของเส้นทางเดิม เก็บไว้เผื่อต้องเปิดให้คนนอกเรียกอีก
+ก่อนจะปิด `/opt/odoo-api` บน VPS 118.27.147.123 **ต้องเปิด `tokens.json` บนเครื่องนั้นดูก่อน**
+ว่ามีทีมอื่นที่ `lastUsedAt` ยังขยับอยู่ไหม — ถ้ามีต้องแจ้งเขาก่อน เพราะย้ายมา LAN แล้วเขาเรียกไม่ได้อีก
+(VPS ตัวนั้นยังมี `monitor.flowtica.link` กับ `future.flowtica.link` อยู่ ปิดทั้งเครื่องไม่ได้)

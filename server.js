@@ -8,8 +8,8 @@ dotenv.config({ path: path.join(__dirname, '.env.local') });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// PUBLIC_MODE=1 = ตัวที่ deploy บน VPS ให้ทีมภายนอกเรียกผ่าน https://flowtica.link/odoo-api/
-// เปิดเฉพาะ API ชุดภายนอก + บังคับ token ทุก request, ไม่เสิร์ฟหน้าเว็บ/ไฟล์ใน public/ เลย
+// PUBLIC_MODE=1 = ตัวที่ deploy บน VPS ออฟฟิศ 192.168.101.121:3005 ให้ระบบอื่นในออฟฟิศเรียก
+// เปิดเฉพาะ API ชุดเกตเวย์ + บังคับ token ทุก request, ไม่เสิร์ฟหน้าเว็บ/ไฟล์ใน public/ เลย
 const PUBLIC_MODE = process.env.PUBLIC_MODE === '1';
 
 app.disable('x-powered-by');
@@ -35,7 +35,7 @@ if (!PUBLIC_MODE) {
   });
 }
 
-// หน้าจัดการ token ของทีมภายนอก — เปิดได้ทั้งสองโหมด, ตรวจสิทธิ์ด้วย ADMIN_TOKEN ที่ใส่ในหน้า
+// หน้าจัดการ token ของระบบที่มาเรียกเกตเวย์ — เปิดได้ทั้งสองโหมด, ตรวจสิทธิ์ด้วย ADMIN_TOKEN ที่ใส่ในหน้า
 app.get('/tokens', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tokens.html'));
 });
@@ -97,7 +97,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// โหมดสาธารณะผูกกับ 127.0.0.1 เท่านั้น — ออกเน็ตผ่าน Caddy/proxy ชั้นบนเสมอ
+// โหมดเกตเวย์ default ผูกกับ 127.0.0.1 (สมัยมี Caddy อยู่หน้าบ้าน)
+// ตัวจริงบน 192.168.101.121 ตั้ง BIND_HOST=0.0.0.0 ใน .env.local เพราะรับจาก LAN ตรงไม่มี proxy
 const HOST = process.env.BIND_HOST || (PUBLIC_MODE ? '127.0.0.1' : '0.0.0.0');
 app.listen(PORT, HOST, () => {
   console.log(`✓ Odoo ${PUBLIC_MODE ? 'public API' : 'dashboard'} server running on ${HOST}:${PORT}`);

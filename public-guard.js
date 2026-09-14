@@ -1,4 +1,4 @@
-// หน้าด่านสำหรับ "โหมดเปิดสาธารณะ" (PUBLIC_MODE=1) — ใช้ตอน deploy บน VPS ที่ออกอินเทอร์เน็ต
+// หน้าด่านสำหรับ "โหมดเกตเวย์" (PUBLIC_MODE=1) — ใช้ตอน deploy บน VPS ออฟฟิศ 192.168.101.121
 // บน intranet (192.168.101.104) ไม่ต้องเปิดโหมดนี้ พฤติกรรมเดิมทุกอย่าง
 //
 // ป้องกัน 4 ชั้น:
@@ -6,8 +6,9 @@
 //      + ชุดจัดการ token (/tokens) ที่ตรวจสิทธิ์ด้วย ADMIN_TOKEN ใน router — ที่เหลือ 404
 //   2) ทุก request ของทีมภายนอกต้องมี Authorization: Bearer <token> (ดูรายชื่อจาก tokens.json)
 //   3) ถ้าตั้ง PROXY_SECRET ไว้ ต้องมี header X-Proxy-Secret ตรงกัน (กันคนยิงข้าม proxy)
+//      เส้นทางปัจจุบันเป็น LAN ตรง ไม่มี proxy แล้ว จึงเว้นว่าง = ข้ามชั้นนี้
 //   4) จำกัดจำนวน request ต่อนาที ต่อ token+IP
-// ทุก request ถูก log ชื่อทีม/เมธอด/พาธ/สถานะ ไว้ใน journald (journalctl -u odoo-api)
+// ทุก request ถูก log ชื่อทีม/เมธอด/พาธ/สถานะ ไว้ใน journald (journalctl --user -u odoo-api)
 
 const tokenStore = require('./token-store');
 
@@ -70,7 +71,7 @@ function createPublicGuard() {
     }
     if (proxySecret && req.headers['x-proxy-secret'] !== proxySecret) {
       console.warn(`[api] ปฏิเสธ (proxy secret ไม่ตรง) ${req.method} ${req.path} จาก ${ip}`);
-      return res.status(403).json({ success: false, error: 'ต้องเรียกผ่าน https://flowtica.link/odoo-api/' });
+      return res.status(403).json({ success: false, error: 'ต้องเรียกผ่าน proxy ที่กำหนดไว้เท่านั้น' });
     }
 
     // ชุดจัดการ token: จำกัดอัตราแล้วปล่อยให้ router ตรวจ ADMIN_TOKEN เอง
