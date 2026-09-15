@@ -142,6 +142,7 @@
 <nav><div class="inner">
   <span class="brand">CFF Odoo API</span>
   <a href="#overview">ภาพรวม</a>
+  <a href="#network">เครือข่าย</a>
   <a href="#quickstart">เริ่มต้น</a>
   <a href="#read">Read API</a>
   <a href="#write">Write API</a>
@@ -157,11 +158,12 @@
 <div class="cover">
   <div class="org">CITY FRESH FRUIT CO., LTD. — IT / EDP</div>
   <h1>Odoo API Developer Guide</h1>
-  <div class="sub">คู่มือเชื่อมต่อดึงข้อมูลระบบ Odoo 14 ผ่าน REST API สำหรับนักพัฒนาและทีมที่ได้รับอนุญาต</div>
+  <div class="sub">คู่มือเชื่อมต่อดึงข้อมูลระบบ Odoo 14 ผ่าน REST API สำหรับระบบและนักพัฒนาภายในบริษัท</div>
   <div class="meta">
-    <span>📄 เวอร์ชัน: กันยายน 2026 (API v2.1.0)</span>
-    <span>🌐 Base URL: <b>https://flowtica.link/odoo-api</b></span>
-    <span>🔑 ทุก request ต้องมี Authorization: Bearer &lt;token&gt;</span>
+    <span>📄 เวอร์ชัน: 15 กันยายน 2026 (API v2.1.0)</span>
+    <span>🌐 Base URL: <b>http://192.168.101.121:3005</b></span>
+    <span>🔒 เรียกได้เฉพาะในวง LAN ของบริษัท</span>
+    <span>🔑 ทุก endpoint ใต้ /api/odoo ต้องมี Authorization: Bearer &lt;token&gt;</span>
   </div>
   <div class="downloads">
     <a href="CFF-Odoo-API-Guide.pdf" download>⬇ ดาวน์โหลดคู่มือ (PDF)</a>
@@ -172,13 +174,13 @@
 
 <h2 id="overview"><span class="no">1</span>ภาพรวม</h2>
 
-<pre><code>แอปของคุณ (จากที่ไหนก็ได้) ──HTTPS/JSON──&gt;  https://flowtica.link/odoo-api/api/odoo/*
-                                        │  API Gateway (ควบคุมสิทธิ์การอ่าน/เขียน)
-                                        ▼
-                                  ฐานข้อมูล Odoo 14 ของบริษัท</code></pre>
+<pre><code>แอปของคุณ (ในวง LAN) ──HTTP/JSON──&gt;  http://192.168.101.121:3005/api/odoo/*
+                                   │  API Gateway (ควบคุมสิทธิ์การอ่าน/เขียน)
+                                   ▼
+                             ฐานข้อมูล Odoo 14 ของบริษัท</code></pre>
 
 <ul>
-  <li><b>Base URL:</b> <code>https://flowtica.link/odoo-api</code> — เรียกได้จากอินเทอร์เน็ต (HTTPS) <b>ต้องแนบ token ทุก request</b></li>
+  <li><b>Base URL:</b> <code>http://192.168.101.121:3005</code> — <b>เรียกได้เฉพาะเครื่องที่อยู่ในวง LAN ของบริษัท</b> (ดูข้อ <a href="#network">ขอบเขตเครือข่าย</a>) และต้องแนบ token ทุก request</li>
   <li>API เป็น <b>read-only เป็นหลัก</b> — การเขียนข้อมูล (INSERT) ต้องใช้ token และเปิดสิทธิ์รายตาราง</li>
   <li>ข้อมูลอ่านจากฐานข้อมูลจริงของ Odoo → ได้ข้อมูลชุดเดียวกับที่เห็นใน Odoo</li>
   <li>ทุก response เป็น JSON รูปแบบเดียวกัน:</li>
@@ -197,29 +199,58 @@
   <tr><td>เขียนข้อมูล (INSERT)</td><td>ติดต่อผู้ดูแลระบบ (ฝ่าย IT/EDP) เพื่อ (1) รับ token และ (2) ขอเปิดสิทธิ์ตารางที่ต้องการเขียน</td></tr>
 </table></div>
 
-<h2 id="quickstart"><span class="no">2</span>เริ่มต้นเร็วที่สุด (Quick Start)</h2>
+<h2 id="network"><span class="no">2</span>ขอบเขตเครือข่าย — อ่านก่อนเริ่ม</h2>
+
+<div class="warn">
+  ⚠️ API ตัวนี้ <b>เรียกได้เฉพาะจากเครื่องที่อยู่ในวง LAN ของบริษัทเท่านั้น</b>
+  ไม่ได้เปิดออกอินเทอร์เน็ต และ<b>ไม่มี HTTPS</b> — เรียกจากบ้าน จากมือถือผ่าน 4G
+  หรือจากเซิร์ฟเวอร์ภายนอก จะต่อไม่ติด
+</div>
+
+<div class="tablewrap"><table>
+  <tr><th style="width:34%">เรียกจากที่ไหน</th><th>ใช้ได้ไหม</th></tr>
+  <tr><td>เครื่องในออฟฟิศ (LAN / Wi-Fi บริษัท)</td><td>✅ ใช้ได้</td></tr>
+  <tr><td>เซิร์ฟเวอร์ในออฟฟิศ</td><td>✅ ใช้ได้ — เป็นกรณีที่ออกแบบมาให้ใช้</td></tr>
+  <tr><td>ต่อ VPN ของบริษัทเข้ามา</td><td>✅ ใช้ได้ (ถ้า VPN เห็นวง 192.168.101.x)</td></tr>
+  <tr><td>อินเทอร์เน็ตทั่วไป / นอกออฟฟิศ</td><td>❌ ต่อไม่ได้</td></tr>
+</table></div>
+
+<p><b>ทำไมถึงเป็นแบบนี้:</b> เดิม API ตัวนี้เปิดออกอินเทอร์เน็ตผ่านโดเมนภายนอก
+แต่คนที่เรียกใช้จริงมีแต่ระบบในออฟฟิศ ข้อมูลจึงวิ่งออกเน็ตไปกลับโดยไม่จำเป็น
+ทั้งช้ากว่าและมีจุดพังเพิ่มโดยเปล่าประโยชน์ เดือนกันยายน 2026 จึงย้ายเข้ามารันในออฟฟิศ
+ผลคือเร็วขึ้นราว 2–3 เท่า และไม่ต้องพึ่งบริการภายนอกอีก</p>
+
+<div class="tip">
+  💡 <b>ถ้างานของคุณจำเป็นต้องเรียกจากนอกออฟฟิศจริง ๆ</b> ให้แจ้งฝ่าย IT/EDP
+  อย่าพยายาม forward พอร์ตออกเน็ตเอง เพราะ API ตัวนี้ไม่มี TLS
+  token จะวิ่งเป็น plain text บนอินเทอร์เน็ต
+</div>
+
+<h2 id="quickstart"><span class="no">3</span>เริ่มต้นเร็วที่สุด (Quick Start)</h2>
 
 <pre><code># ตั้งค่า token ที่ได้รับจากฝ่าย IT/EDP ก่อน
 export TOKEN="&lt;token ที่ได้รับ&gt;"
 
 # 1) เช็คว่า server ออนไลน์ (endpoint เดียวที่ไม่ต้องใช้ token)
-curl https://flowtica.link/odoo-api/health
+curl http://192.168.101.121:3005/health
 # → {"status":"ok","message":"Odoo dashboard server is running"}
 
 # 2) ดูรายชื่อตารางทั้งหมดใน Odoo
-curl -H "Authorization: Bearer $TOKEN" https://flowtica.link/odoo-api/api/odoo/tables
+curl -H "Authorization: Bearer $TOKEN" http://192.168.101.121:3005/api/odoo/tables
 
 # 3) ยิง SQL query แรกของคุณ
-curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
+curl -X POST http://192.168.101.121:3005/api/odoo/query \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT id, name FROM res_partner ORDER BY id LIMIT 5"}'</code></pre>
 
 <div class="tip">💡 ใช้ Postman? ดาวน์โหลด <a href="CFF-Odoo-API.postman_collection.json" download>Postman Collection</a> แล้ว Import ได้เลย — มีตัวอย่างครบทุก endpoint</div>
 
-<h2 id="read"><span class="no">3</span>Read API (ไม่ต้องใช้ token)</h2>
+<h2 id="read"><span class="no">4</span>Read API (ต้องใช้ token)</h2>
 
-<h3><span class="method get">GET</span><code>/health</code> — Health check</h3>
+<div class="tip">🔑 <b>ทุก endpoint ใต้ <code>/api/odoo</code> ต้องแนบ token</b> — มีเพียง <code>/health</code> เท่านั้นที่เรียกได้โดยไม่ต้องมี token (ไว้ให้ระบบ monitoring เช็ค)</div>
+
+<h3><span class="method get">GET</span><code>/health</code> — Health check <span class="method get" style="background:#e8f5e9;color:#2e7d32">ไม่ต้องใช้ token</span></h3>
 <p>ตรวจว่าระบบทำงานอยู่ ใช้สำหรับ monitoring ได้</p>
 
 <h3><span class="method get">GET</span><code>/api/odoo/tables</code> — รายชื่อตารางทั้งหมด</h3>
@@ -228,7 +259,7 @@ curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
 
 <h3><span class="method get">GET</span><code>/api/odoo/schema/:tableName</code> — โครงสร้างตาราง</h3>
 <p>ดูคอลัมน์ ชนิดข้อมูล และ nullable ของตารางที่สนใจ</p>
-<pre><code>curl -H "Authorization: Bearer $TOKEN" https://flowtica.link/odoo-api/api/odoo/schema/res_partner
+<pre><code>curl -H "Authorization: Bearer $TOKEN" http://192.168.101.121:3005/api/odoo/schema/res_partner
 
 # → { "success": true, "data": [
 #      { "column_name": "id", "data_type": "integer", "is_nullable": "NO" }, ... ] }</code></pre>
@@ -240,14 +271,14 @@ curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
   <li><b>ใส่ <code>LIMIT</code> เสมอ</b> — query ยิงเข้าฐานข้อมูลที่ระบบงานจริงใช้อยู่ (ดูข้อ <a href="#fairuse">Fair Use</a>)</li>
   <li>Timestamp ในฐานข้อมูลเก็บเป็น <b>UTC</b> — แปลงเป็นเวลาไทยด้วย <code>AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'</code> (คอลัมน์ชนิด DATE เช่น <code>invoice_date</code> ใช้ตรง ๆ ได้)</li>
 </ul>
-<pre><code>curl -X POST https://flowtica.link/odoo-api/api/odoo/query \
+<pre><code>curl -X POST http://192.168.101.121:3005/api/odoo/query \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT name, email FROM res_partner WHERE customer_rank &gt; 0 ORDER BY id DESC LIMIT 20"}'
 
 # → { "success": true, "data": [ { "name": "…", "email": "…" } ], "count": 20 }</code></pre>
 
-<h2 id="write" class="pagebreak-print"><span class="no">4</span>Write API — INSERT (ต้องใช้ token)</h2>
+<h2 id="write" class="pagebreak-print"><span class="no">5</span>Write API — INSERT (ต้องใช้ token)</h2>
 
 <div class="warn">
   ⚠️ <b>คำเตือนสำคัญ:</b> การ INSERT ผ่าน API นี้เขียนตรงเข้าฐานข้อมูล จะ<b>ข้าม business logic ของ Odoo ทั้งหมด</b>
@@ -268,18 +299,18 @@ x-api-key: &lt;token&gt;                ← ทางเลือก</code></pre
   <li>เติม <code>?dryRun=1</code> เพื่อดู SQL ที่จะรันโดย<b>ไม่เขียนจริง</b> — <b>ใช้ทดสอบก่อนยิงจริงทุกครั้ง</b></li>
 </ul>
 <pre><code># ทดสอบก่อน (ไม่เขียนจริง)
-curl -X POST "https://flowtica.link/odoo-api/api/odoo/insert/my_table?dryRun=1" \
+curl -X POST "http://192.168.101.121:3005/api/odoo/insert/my_table?dryRun=1" \
   -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
   -d '{"data": {"name": "ทดสอบ", "qty": 5}}'
 
 # ยิงจริง
-curl -X POST https://flowtica.link/odoo-api/api/odoo/insert/my_table \
+curl -X POST http://192.168.101.121:3005/api/odoo/insert/my_table \
   -H "Authorization: Bearer &lt;token&gt;" -H "Content-Type: application/json" \
   -d '{"data": [{"name": "A", "qty": 1}, {"name": "B", "qty": 2}]}'</code></pre>
 <p><b>Response สำเร็จ</b> — คืนแถวที่ insert แล้วทั้งหมด (รวมค่า default เช่น <code>id</code>):</p>
 <pre><code>{ "success": true, "count": 2, "data": [ { "id": 101, "name": "A", "qty": 1 }, … ] }</code></pre>
 
-<h2 id="data"><span class="no">5</span>ข้อควรรู้เมื่อดึงข้อมูล Odoo</h2>
+<h2 id="data"><span class="no">6</span>ข้อควรรู้เมื่อดึงข้อมูล Odoo</h2>
 
 <h3>ตารางหลักที่ใช้บ่อย</h3>
 <div class="tablewrap"><table>
@@ -311,23 +342,24 @@ WHERE am.move_type IN ('out_invoice','out_refund')
   AND date_trunc('month', am.invoice_date) =
       date_trunc('month', (now() AT TIME ZONE 'Asia/Bangkok')::date)</code></pre>
 
-<h2 id="errors"><span class="no">6</span>Error Codes</h2>
+<h2 id="errors"><span class="no">7</span>Error Codes</h2>
 
 <div class="tablewrap"><table>
   <tr><th style="width:10%">HTTP</th><th style="width:30%">ความหมาย</th><th>เจอเมื่อ</th></tr>
   <tr><td><code>400</code></td><td>คำขอผิดรูปแบบ</td><td>ไม่ส่ง <code>sql</code>, คอลัมน์ไม่มีในตาราง, data เกิน 500 แถว, ข้อมูลขัด constraint ของตาราง</td></tr>
-  <tr><td><code>401</code></td><td>token ผิดหรือไม่ได้ส่ง</td><td>Write API ทุกตัว</td></tr>
+  <tr><td><code>401</code></td><td>token ผิด ถูกปิดใช้ หรือไม่ได้ส่ง</td><td>ทุก endpoint ใต้ <code>/api/odoo</code></td></tr>
+  <tr><td><code>429</code></td><td>เรียกถี่เกินกำหนด</td><td>เกิน 60 ครั้ง/นาที ต่อ token ต่อ IP — รอครบนาทีแล้วลองใหม่</td></tr>
   <tr><td><code>403</code></td><td>ไม่อนุญาต</td><td>query ที่ไม่ใช่ SELECT/WITH, ตารางยังไม่ได้รับสิทธิ์ insert</td></tr>
-  <tr><td><code>404</code></td><td>ไม่พบ</td><td>ตารางไม่มีในฐานข้อมูล</td></tr>
+  <tr><td><code>404</code></td><td>ไม่พบ</td><td>ตารางไม่มีในฐานข้อมูล หรือเรียก endpoint ที่ไม่ได้เปิดในชุดนี้</td></tr>
   <tr><td><code>503</code></td><td>Write API ยังไม่เปิดใช้งาน</td><td>ระบบยังไม่เปิดรับการเขียนข้อมูล — ติดต่อผู้ดูแล</td></tr>
   <tr><td><code>500</code></td><td>ข้อผิดพลาดฝั่งระบบ</td><td>ดูรายละเอียดในฟิลด์ <code>error</code> แล้วแจ้งผู้ดูแล</td></tr>
 </table></div>
 <p>ทุก error มี body: <code>{ "success": false, "error": "…" }</code></p>
 
-<h2 id="examples" class="pagebreak-print"><span class="no">7</span>ตัวอย่างโค้ดภาษาต่าง ๆ</h2>
+<h2 id="examples" class="pagebreak-print"><span class="no">8</span>ตัวอย่างโค้ดภาษาต่าง ๆ</h2>
 
 <h3>JavaScript (fetch)</h3>
-<pre><code>const BASE = 'https://flowtica.link/odoo-api';
+<pre><code>const BASE = 'http://192.168.101.121:3005';
 const TOKEN = '&lt;token ที่ได้รับจากฝ่าย IT/EDP&gt;';
 
 const q = await fetch(`${BASE}/api/odoo/query`, {
@@ -342,7 +374,7 @@ console.log(q.data);</code></pre>
 <h3>Python (requests)</h3>
 <pre><code>import requests
 
-BASE = 'https://flowtica.link/odoo-api'
+BASE = 'http://192.168.101.121:3005'
 HEAD = {'Authorization': 'Bearer &lt;token ที่ได้รับจากฝ่าย IT/EDP&gt;'}
 
 # SQL query
@@ -358,7 +390,7 @@ r = requests.post(f'{BASE}/api/odoo/insert/my_table',
                   json={'data': {'name': 'ทดสอบ', 'qty': 5}})</code></pre>
 
 <h3>PHP (cURL)</h3>
-<pre><code>$base = 'https://flowtica.link/odoo-api';
+<pre><code>$base = 'http://192.168.101.121:3005';
 
 $ch = curl_init("$base/api/odoo/query");
 curl_setopt_array($ch, [
@@ -379,7 +411,7 @@ print_r($body['data']);</code></pre>
   ถ้าต้องการผลลัพธ์ SQL ใน Excel ให้ใช้ <code>Web.Contents</code> แบบ POST:
   <pre><code>let
   Source = Json.Document(Web.Contents(
-    "https://flowtica.link/odoo-api/api/odoo/query",
+    "http://192.168.101.121:3005/api/odoo/query",
     [ Headers = [#"Content-Type"="application/json", #"Authorization"="Bearer &lt;token&gt;"],
       Content = Json.FromValue([sql = "SELECT name FROM res_partner LIMIT 100"]) ])),
   Rows = Table.FromRecords(Source[data])
@@ -387,7 +419,7 @@ in
   Rows</code></pre>
 </div>
 
-<h2 id="fairuse"><span class="no">8</span>ข้อควรปฏิบัติ (Fair Use)</h2>
+<h2 id="fairuse"><span class="no">9</span>ข้อควรปฏิบัติ (Fair Use)</h2>
 
 <ol>
   <li><b>ใส่ <code>LIMIT</code> ทุก query</b> — ฐานข้อมูลนี้คือตัวเดียวกับที่ระบบงานหลักของบริษัทใช้อยู่ query หนักกระทบผู้ใช้ Odoo ทั้งบริษัท</li>
@@ -398,7 +430,7 @@ in
   <li>ถ้าต้องใช้ query ซับซ้อนซ้ำ ๆ เป็นประจำ แจ้งผู้ดูแลให้ทำเป็น endpoint เฉพาะ (มี cache) จะเร็วกว่าและเบากับระบบกว่า</li>
 </ol>
 
-<h2 id="contact"><span class="no">9</span>ติดต่อ / แจ้งปัญหา</h2>
+<h2 id="contact"><span class="no">10</span>ติดต่อ / แจ้งปัญหา</h2>
 
 <ul>
   <li><b>ผู้ดูแลระบบ:</b> ฝ่าย IT/EDP — ขอ token, ขอเปิดสิทธิ์ตาราง INSERT, ขอ endpoint ใหม่</li>
@@ -411,7 +443,7 @@ in
 </ul>
 
 <div class="footer-note">
-  CFF Odoo API Developer Guide — จัดทำโดยฝ่าย IT/EDP, CITY FRESH FRUIT CO., LTD. · เอกสารภายในบริษัท ห้ามเผยแพร่ภายนอก · กรกฎาคม 2026
+  CFF Odoo API Developer Guide — จัดทำโดยฝ่าย IT/EDP, CITY FRESH FRUIT CO., LTD. · เอกสารภายในบริษัท ห้ามเผยแพร่ภายนอก · ปรับปรุง 15 กันยายน 2026
 </div>
 
 </main>

@@ -1,13 +1,35 @@
 # CFF Odoo API Guide (ฉบับภายใน — ครบทุก endpoint)
 
-> ⚠️ เอกสารนี้เป็น**ฉบับภายใน** มีข้อมูล endpoint ของ dashboard/config ที่ไม่ควรแจกคนภายนอก
-> ถ้าจะส่งให้ทีมภายนอกที่มาต่อ integration ให้ใช้ชุดเอกสารใน `public/` แทน:
-> หน้าเว็บ `api-guide.html` · PDF `CFF-Odoo-API-Guide.pdf` · OpenAPI `openapi.yaml` · Postman `CFF-Odoo-API.postman_collection.json`
+> ⚠️ เอกสารนี้เป็น**ฉบับภายใน** ครอบคลุม endpoint ทั้งหมดของ **dashboard บนอินทราเน็ต (192.168.101.104)**
+> รวม endpoint ของ dashboard/config ที่ไม่ควรแจกต่อ
 
 คู่มือสำหรับนักพัฒนา/ทีมอื่นที่ต้องการดึงข้อมูลจากระบบ Odoo 14 ของ CITY FRESH FRUIT
 ผ่าน REST API ของ Odoo Dashboard (ไม่ต้องต่อ database ตรง ไม่ต้องมี user Odoo)
 
-> **เวอร์ชันเอกสาร:** กรกฎาคม 2026 · สอดคล้องกับ server v2.0.0
+> **เวอร์ชันเอกสาร:** 15 กันยายน 2026 · สอดคล้องกับ server v2.1.0
+
+---
+
+## 0. ตอนนี้มี API อยู่ 2 ตัว — อ่านก่อนว่าจะใช้ตัวไหน
+
+โค้ดชุดเดียวกัน deploy อยู่ 2 ที่ **คนละเครื่อง คนละ service แก้คนละที่**
+
+| | **Dashboard** (เอกสารฉบับนี้) | **เกตเวย์ SQL** |
+|---|---|---|
+| Base URL | `http://192.168.101.104/Odoo` | `http://192.168.101.121:3005` |
+| ใครใช้ | คนเปิดดู dashboard + เครื่องมือภายในทีม IT | ระบบอื่นที่ต้องดึงข้อมูลอัตโนมัติ (เช่น `sales-data-hub`) |
+| token | ไม่ต้องใช้ — อยู่ใน LAN ก็เรียกได้ | **ต้องใช้ทุก endpoint ใต้ `/api/odoo`** (ยกเว้น `/health`) |
+| endpoint | ครบทุกตัวตามเอกสารนี้ | เปิดแค่ 4 ตัว: `tables`, `schema/:table`, `query`, `insert/:table` — ที่เหลือ 404 |
+| หน้าเว็บ | มี (dashboard, insights, config, APIGuide) | ไม่มีเลย ยกเว้นหน้าจัดการ token |
+| service | `systemctl restart odoo-dashboard` (root) | `systemctl --user restart odoo-api` (user `vittawat`) |
+| เอกสาร | ไฟล์นี้ | `public/api-guide.html` · `openapi.yaml` · `CFF-Odoo-API.postman_collection.json` |
+
+**เลือกยังไง:** ถ้าเขียนระบบที่ต้องดึงข้อมูลเองเป็นประจำ ให้ใช้**เกตเวย์ที่ .121**
+เพราะมี token แยกรายระบบ เพิกถอนได้ทีละตัว และมีสถิติว่าใครเรียกอะไรบ้าง
+ส่วน .104 ไว้สำหรับดู dashboard และงาน ad-hoc ของทีม IT
+
+> เกตเวย์เคยเปิดออกอินเทอร์เน็ตผ่านโดเมนภายนอก ย้ายเข้ามาในออฟฟิศเมื่อ 14 ก.ย. 2569
+> เพราะผู้ใช้จริงมีแต่ระบบในออฟฟิศ — รายละเอียดดู README
 
 ---
 

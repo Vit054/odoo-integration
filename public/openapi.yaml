@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: CFF Odoo API
-  version: 2.0.0
+  version: 2.1.0
   description: |
     REST API สำหรับดึงข้อมูลจากระบบ Odoo 14 ของ CITY FRESH FRUIT
 
-    - เข้าถึงได้เฉพาะเครือข่ายภายในบริษัท (LAN) เท่านั้น
-    - **Read API** ไม่ต้องใช้ token
+    - เข้าถึงได้เฉพาะเครือข่ายภายในบริษัท (LAN) เท่านั้น — ไม่ได้เปิดออกอินเทอร์เน็ต และไม่มี HTTPS
+    - **ทุก endpoint ใต้ `/api/odoo` ต้องใช้ Bearer token** — มีเพียง `/health` ที่เรียกได้โดยไม่ต้องมี token
     - **Write API** (INSERT) ต้องใช้ Bearer token และตารางต้องได้รับอนุญาตจากผู้ดูแลระบบเป็นรายตาราง
+    - จำกัด 60 ครั้ง/นาที ต่อ token ต่อ IP (เกินได้ HTTP 429)
     - ทุก response เป็น JSON: สำเร็จ `{success: true, data, count}` / ผิดพลาด `{success: false, error}`
 
     **Fair Use:** ใส่ LIMIT ทุก query, อย่า SELECT * จากตารางใหญ่, อย่า polling ถี่เกินจำเป็น
@@ -15,12 +16,12 @@ info:
     name: IT/EDP — CITY FRESH FRUIT CO., LTD.
 
 servers:
-  - url: https://flowtica.link/odoo-api
-    description: Production สำหรับทีมภายนอก (HTTPS — ต้องแนบ Bearer token ทุก request)
+  - url: http://192.168.101.121:3005
+    description: เกตเวย์ SQL ในออฟฟิศ (LAN — ต้องแนบ Bearer token ทุก request) — spec ฉบับนี้อธิบายตัวนี้
   - url: http://192.168.101.104/Odoo
-    description: ภายในบริษัท (LAN — ไม่ต้องใช้ token)
+    description: Dashboard ผู้บริหารบนอินทราเน็ต (LAN — ไม่ต้องใช้ token, มี endpoint เพิ่มอีกหลายตัวที่ไม่ได้อยู่ใน spec นี้)
 
-# ทุก endpoint ต้องมี token เมื่อเรียกผ่าน URL สาธารณะ (ยกเว้น /health)
+# ทุก endpoint ใต้ /api/odoo ต้องมี token (ยกเว้น /health)
 security:
   - bearerAuth: []
 
@@ -28,7 +29,7 @@ tags:
   - name: System
     description: ตรวจสถานะระบบ
   - name: Read
-    description: อ่านข้อมูล — ไม่ต้องใช้ token
+    description: อ่านข้อมูล — ต้องใช้ Bearer token
   - name: Write
     description: เขียนข้อมูล — ต้องใช้ Bearer token และตารางต้องได้รับอนุญาต
 
